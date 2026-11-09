@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { PublicHeader } from "@/components/ui";
 
@@ -14,12 +15,7 @@ export default function Home() {
       <PublicHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
         <section className="flex flex-col items-center text-center">
-          <div className="marquee-card mt-2 w-full max-w-md rounded-[2.5rem] px-6 pt-3 pb-5 text-center" role="img" aria-label="Kaanivaa 44">
-            <div className="bulbs bulbs-animated mx-6" aria-hidden />
-            <div className="mt-2 font-display text-5xl tracking-wider text-carnival-red drop-shadow-[0_2px_0_#f5b82e] sm:text-6xl">KAANIVAA</div>
-            <div className="font-display text-6xl text-carnival-red drop-shadow-[0_2px_0_#f5b82e] sm:text-7xl">44</div>
-            <div className="bulbs bulbs-animated mx-6 mt-2" aria-hidden />
-          </div>
+          <Image src="/kaanivaa-logo.webp" alt="Kaanivaa 44" width={676} height={321} priority className="h-auto w-full max-w-xl" />
           <p className="mt-2 text-lg font-semibold text-carnival-teal-dark">Staff duty roster · 11–14 November 2026</p>
           <div className="mt-4 flex gap-2">
             {DAYS.map((x) => (
