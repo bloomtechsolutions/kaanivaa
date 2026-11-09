@@ -10,7 +10,7 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | `/winners` | everyone | Daily MVR 2,000 winners + grand iPhone 18 Pro winner |
 | `/admin` | leaders, admins | Live coverage & attendance per day/shift |
 | `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; **add staff to an extra shift** (tagged EXTRA, removable); live sync between devices |
-| `/admin/staff` | leaders, admins | Per-staff shifts, attendance, draw entries; CSV export. Admins: add staff, auto-assign, **move or remove a duty, remove all duties**, remove staff |
+| `/admin/staff` | leaders, admins | Per-staff shifts, attendance, draw entries; CSV export. Admins: add staff, **edit staff details**, auto-assign, **add / move / remove a duty, remove all duties**, remove staff |
 | `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
 | `/admin/reports` | admins | Excel reports (full event, daily, staff, lucky draw, follow-up) |
 | `/admin/users` | admins | Grant leader/admin console access; **assign leaders to areas and shifts** (they then only see and manage those locations/shifts; "use their roster shifts" fills shifts from the roster) |

@@ -19,6 +19,7 @@ export default function StaffPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const isAdmin = role === "admin";
 
@@ -159,6 +160,14 @@ export default function StaffPage() {
                   <tr className="bg-carnival-sky/40">
                     <td colSpan={7} className="px-4 py-3">
                       <div className="mb-2 text-xs text-carnival-ink/70">{s.email ?? "No email on file"} · {s.registration_status}</div>
+                      {isAdmin && editing === s.id && (
+                        <EditStaff
+                          person={s}
+                          onCancel={() => setEditing(null)}
+                          onSaved={(text) => { setEditing(null); setMsg({ ok: true, text }); reload(); }}
+                          onError={(text) => setMsg({ ok: false, text })}
+                        />
+                      )}
                       {isAdmin ? (
                         <DutyManager
                           person={s}
@@ -182,6 +191,10 @@ export default function StaffPage() {
                       )}
                       {isAdmin && (
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <button onClick={() => setEditing(editing === s.id ? null : s.id)}
+                            className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-carnival-teal-dark ring-1 ring-carnival-teal/40 hover:bg-carnival-sky">
+                            ✎ Edit details
+                          </button>
                           <button onClick={() => autoAssign(s.id, s.full_name)} className="rounded-lg bg-carnival-teal px-3 py-1.5 text-xs font-bold text-white hover:bg-carnival-teal-dark">
                             Auto-assign duties for available days
                           </button>
@@ -284,6 +297,9 @@ function DutyManager({
   const [toShift, setToShift] = useState<number>(0);
   const [toLoc, setToLoc] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addShift, setAddShift] = useState<number>(0);
+  const [addLoc, setAddLoc] = useState("");
   const byId = new Map(shifts.map((sh) => [sh.id, sh]));
   const taken = new Set(duties.map((a) => a.shift_id));
   const locs = LOCATIONS.filter((l) => l.name !== "Shift Leadership" || person.is_leader);
@@ -311,7 +327,27 @@ function DutyManager({
     onDone(`${person.full_name} removed from ${shiftName(sh)}.`);
   }
 
-  if (duties.length === 0) return <div className="text-xs">No shifts assigned.</div>;
+  function startAdd() {
+    setAdding(true);
+    setAddShift(shifts.find((x) => !taken.has(x.id))?.id ?? 0);
+    setAddLoc(locs.find((l) => l.name !== "Shift Leadership")?.name ?? locs[0].name);
+  }
+
+  async function saveAdd() {
+    const sh = byId.get(addShift);
+    if (!sh) return;
+    setBusy(true);
+    const { error } = await supabase().from("assignments").insert({
+      shift_id: addShift, staff_id: person.id, location: addLoc,
+      responsibility: addLoc === "Shift Leadership" ? "LEADER" : "AREA",
+    });
+    setBusy(false);
+    if (error) return onDone(error.message.includes("duplicate") ? `${person.full_name} is already on that shift.` : error.message, false);
+    setAdding(false);
+    onDone(`${person.full_name}: duty added on ${shiftName(sh)} at ${addLoc}.`);
+  }
+
+  const free = shifts.filter((x) => !taken.has(x.id));
 
   return (
     <ul className="divide-y divide-carnival-teal/10 rounded-xl bg-white ring-1 ring-carnival-teal/20">
@@ -357,6 +393,110 @@ function DutyManager({
           </li>
         );
       })}
+      {duties.length === 0 && <li className="px-3 py-2 text-xs text-carnival-ink/60">No shifts assigned.</li>}
+      <li className="px-3 py-2">
+        {!adding ? (
+          <button onClick={startAdd} disabled={free.length === 0}
+            className="rounded-lg bg-carnival-teal/10 px-3 py-1.5 text-xs font-bold text-carnival-teal-dark hover:bg-carnival-teal/20 disabled:opacity-40">
+            + Add duty{free.length === 0 ? " (already on every shift)" : ""}
+          </button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-carnival-cream p-2">
+            <span className="text-xs font-bold">Add duty on</span>
+            <select value={addShift} onChange={(e) => setAddShift(Number(e.target.value))} aria-label="Shift for new duty"
+              className="rounded-lg border-0 bg-white px-2 py-1.5 text-xs ring-1 ring-carnival-teal/30">
+              {shifts.map((x) => (
+                <option key={x.id} value={x.id} disabled={taken.has(x.id)}>
+                  {shiftName(x)}{taken.has(x.id) ? " — already on it" : ""}
+                </option>
+              ))}
+            </select>
+            <select value={addLoc} onChange={(e) => setAddLoc(e.target.value)} aria-label="Location for new duty"
+              className="rounded-lg border-0 bg-white px-2 py-1.5 text-xs ring-1 ring-carnival-teal/30">
+              {locs.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+            <button onClick={saveAdd} disabled={busy || !addShift || taken.has(addShift)}
+              className="rounded-lg bg-carnival-red px-3 py-1.5 text-xs font-bold text-white hover:bg-carnival-red-dark disabled:opacity-40">
+              {busy ? "Adding…" : "Add"}
+            </button>
+            <button onClick={() => setAdding(false)} className="text-xs font-bold text-carnival-ink/60 hover:underline">Cancel</button>
+          </div>
+        )}
+      </li>
     </ul>
+  );
+}
+
+/** Admin: edit a staff member's details. */
+function EditStaff({
+  person, onCancel, onSaved, onError,
+}: {
+  person: Staff;
+  onCancel: () => void;
+  onSaved: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [name, setName] = useState(person.full_name);
+  const [uid, setUid] = useState(person.uid ?? "");
+  const [email, setEmail] = useState(person.email ?? "");
+  const [leader, setLeader] = useState(person.is_leader);
+  const [dates, setDates] = useState<string[]>(person.available_dates);
+  const [busy, setBusy] = useState(false);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (name.trim().length < 3) return onError("Enter the full name.");
+    setBusy(true);
+    const { error } = await supabase().from("staff").update({
+      full_name: name.trim(),
+      uid: uid.trim() ? uid.trim().toUpperCase() : null,
+      email: email.trim() ? email.trim().toLowerCase() : null,
+      is_leader: leader,
+      available_dates: [...dates].sort(),
+    }).eq("id", person.id);
+    setBusy(false);
+    if (error) {
+      const m = error.message;
+      return onError(
+        m.includes("staff_uid_norm_uniq") ? `UID ${uid} already belongs to another staff member.`
+        : m.includes("staff_email_uniq") ? `Email ${email} already belongs to another staff member.`
+        : m.includes("staff_full_name_key") ? `Another staff member is already called "${name.trim()}".`
+        : m,
+      );
+    }
+    onSaved(`${name.trim()}'s details updated.`);
+  }
+
+  return (
+    <form onSubmit={save} className="mb-3 space-y-3 rounded-xl bg-white p-3 ring-2 ring-carnival-gold">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block text-xs font-semibold">Full name<input required minLength={3} value={name} onChange={(e) => setName(e.target.value)} className={field} /></label>
+        <label className="block text-xs font-semibold">UID<input value={uid} onChange={(e) => setUid(e.target.value)} placeholder="U3450" className={field} /></label>
+        <label className="block text-xs font-semibold">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="u3450@bml.com.mv" className={field} /></label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold">Available days</span>
+        {EVENT_DATES.map((d) => {
+          const on = dates.includes(d);
+          return (
+            <button type="button" key={d} onClick={() => setDates((p) => (on ? p.filter((x) => x !== d) : [...p, d]))} aria-pressed={on}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold ring-1 ${on ? "bg-carnival-teal text-white ring-carnival-teal" : "bg-white ring-carnival-teal/30"}`}>
+              {fmtDate(d)}
+            </button>
+          );
+        })}
+        <label className="ml-2 flex items-center gap-2 text-xs font-semibold">
+          <input type="checkbox" checked={leader} onChange={(e) => setLeader(e.target.checked)} className="size-4 accent-carnival-red" />
+          Shift leader
+        </label>
+      </div>
+      <p className="text-[11px] text-carnival-ink/60">Changing available days doesn&apos;t move existing duties — use Move / Remove / + Add duty below, or Auto-assign.</p>
+      <div className="flex gap-2">
+        <button disabled={busy} className="rounded-lg bg-carnival-red px-4 py-1.5 text-xs font-bold text-white hover:bg-carnival-red-dark disabled:opacity-50">
+          {busy ? "Saving…" : "Save details"}
+        </button>
+        <button type="button" onClick={onCancel} className="text-xs font-bold text-carnival-ink/60 hover:underline">Cancel</button>
+      </div>
+    </form>
   );
 }
