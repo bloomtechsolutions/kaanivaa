@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { createContext, useContext, type ReactNode } from "react";
 import { ErrorBox, Spinner } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
@@ -34,12 +34,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const { role, email } = useRole();
   const roster = useRoster();
   const pathname = usePathname();
-  const router = useRouter();
 
   async function signOut() {
     await supabase().auth.signOut();
-    router.replace("/login");
-    router.refresh();
+    window.location.replace("/login");
   }
 
   let body: ReactNode;

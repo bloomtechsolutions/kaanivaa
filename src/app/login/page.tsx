@@ -1,13 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ErrorBox, Marquee, PublicHeader } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
 import { isConfigured } from "@/lib/supabase/env";
 
 export default function Login() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +16,13 @@ export default function Login() {
     setBusy(true);
     setError(null);
     const { error } = await supabase().auth.signInWithPassword({ email: email.trim(), password });
-    setBusy(false);
-    if (error) return setError(error.message);
-    router.replace("/admin");
-    router.refresh();
+    if (error) {
+      setBusy(false);
+      return setError(error.message);
+    }
+    // Full page load so the server sees the new session cookie
+    // (a client-side navigation could reuse a cached "signed out" redirect).
+    window.location.replace("/admin");
   }
 
   return (

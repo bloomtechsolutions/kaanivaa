@@ -26,7 +26,7 @@ export function PublicHeader() {
         <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/me">My duty</Link>
         <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/join">Join</Link>
         <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/winners">Winners</Link>
-        <Link className="rounded-full bg-carnival-teal px-2 py-1.5 text-white sm:px-3 hover:bg-carnival-teal-dark" href="/admin">Admin</Link>
+        <Link prefetch={false} className="rounded-full bg-carnival-teal px-2 py-1.5 text-white sm:px-3 hover:bg-carnival-teal-dark" href="/admin">Admin</Link>
       </nav>
     </header>
   );

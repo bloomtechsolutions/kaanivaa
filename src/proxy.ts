@@ -26,6 +26,13 @@ export async function proxy(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
+  // Already signed in: skip the login form
+  if (data?.claims && request.nextUrl.pathname === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   return response;
 }
 
