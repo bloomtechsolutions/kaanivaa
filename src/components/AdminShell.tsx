@@ -10,6 +10,8 @@ import { useRole, useRoster, type RosterData } from "@/lib/useRoster";
 interface AdminCtx extends RosterData {
   role: "admin" | "leader";
   email: string | null;
+  /** locations this leader is limited to; empty = all (always empty for admins) */
+  areas: string[];
 }
 
 const Ctx = createContext<AdminCtx | null>(null);
@@ -31,7 +33,7 @@ const NAV = [
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
-  const { role, email } = useRole();
+  const { role, email, areas } = useRole();
   const roster = useRoster();
   const pathname = usePathname();
 
@@ -50,7 +52,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </div>
     );
   else if (roster.error) body = <ErrorBox message={roster.error} />;
-  else body = <Ctx.Provider value={{ ...roster, role, email }}>{children}</Ctx.Provider>;
+  else body = <Ctx.Provider value={{ ...roster, role, email, areas: role === "admin" ? [] : areas }}>{children}</Ctx.Provider>;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -70,7 +72,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="hidden text-right text-xs leading-tight sm:block">
             <div className="opacity-90">{email}</div>
-            {role && <div className="font-bold uppercase tracking-wide text-carnival-gold">{role}</div>}
+            {role && (
+              <div className="font-bold uppercase tracking-wide text-carnival-gold">
+                {role}{role === "leader" && areas.length > 0 ? ` · ${areas.join(", ")}` : ""}
+              </div>
+            )}
           </div>
           <button onClick={signOut} className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold hover:bg-white/25">Sign out</button>
         </div>

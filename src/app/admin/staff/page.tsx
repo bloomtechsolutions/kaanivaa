@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
 import { ErrorBox, Heading, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
-import { ATTENDED, EVENT_DATES, STATUS_META, fmtDate, fmtTime } from "@/lib/roster";
+import { ATTENDED, EVENT_DATES, LOCATIONS, STATUS_META, fmtDate, fmtTime, type Assignment, type Shift, type Staff } from "@/lib/roster";
 
 function csvCell(v: unknown) {
   const s = v == null ? "" : String(v);
@@ -14,7 +14,7 @@ function csvCell(v: unknown) {
 type Filter = "all" | "new";
 
 export default function StaffPage() {
-  const { role, staff, assignments, shiftById, draws, reload } = useAdmin();
+  const { role, staff, shifts, assignments, shiftById, draws, reload } = useAdmin();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -53,6 +53,13 @@ export default function StaffPage() {
     link.download = `kaanivaa44-attendance-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function removeAllDuties(name: string, ids: string[]) {
+    if (!confirm(`Remove all ${ids.length} duties for ${name}? They stay on the staff list with no shifts.`)) return;
+    const { error } = await supabase().from("assignments").delete().in("id", ids);
+    setMsg(error ? { ok: false, text: error.message } : { ok: true, text: `All duties removed for ${name}.` });
+    reload();
   }
 
   async function autoAssign(id: string, name: string) {
@@ -152,23 +159,38 @@ export default function StaffPage() {
                   <tr className="bg-carnival-sky/40">
                     <td colSpan={7} className="px-4 py-3">
                       <div className="mb-2 text-xs text-carnival-ink/70">{s.email ?? "No email on file"} · {s.registration_status}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {mine.map((a) => {
-                          const sh = shiftById.get(a.shift_id)!;
-                          return (
-                            <span key={a.id} className={`rounded-lg px-2 py-1 text-xs font-semibold ring-1 ${STATUS_META[a.status].chip}`}>
-                              {fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no} · {a.location} · {STATUS_META[a.status].label}
-                              {a.extra ? " · EXTRA" : ""}
-                            </span>
-                          );
-                        })}
-                        {mine.length === 0 && <span className="text-xs">No shifts assigned.</span>}
-                      </div>
+                      {isAdmin ? (
+                        <DutyManager
+                          person={s}
+                          duties={mine}
+                          shifts={shifts}
+                          onDone={(text, ok = true) => { setMsg({ ok, text }); reload(); }}
+                        />
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {mine.map((a) => {
+                            const sh = shiftById.get(a.shift_id)!;
+                            return (
+                              <span key={a.id} className={`rounded-lg px-2 py-1 text-xs font-semibold ring-1 ${STATUS_META[a.status].chip}`}>
+                                {fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no} · {a.location} · {STATUS_META[a.status].label}
+                                {a.extra ? " · EXTRA" : ""}
+                              </span>
+                            );
+                          })}
+                          {mine.length === 0 && <span className="text-xs">No shifts assigned.</span>}
+                        </div>
+                      )}
                       {isAdmin && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button onClick={() => autoAssign(s.id, s.full_name)} className="rounded-lg bg-carnival-teal px-3 py-1.5 text-xs font-bold text-white hover:bg-carnival-teal-dark">
                             Auto-assign duties for available days
                           </button>
+                          {mine.length > 0 && (
+                            <button onClick={() => removeAllDuties(s.full_name, mine.map((a) => a.id))}
+                              className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-rose-700 ring-1 ring-rose-300 hover:bg-rose-50">
+                              Remove all duties (can&apos;t attend)
+                            </button>
+                          )}
                           {won.length === 0 && (
                             <button onClick={() => removeStaff(s.id, s.full_name, mine.length)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100">
                               Remove staff
@@ -244,5 +266,97 @@ function AddStaff({ onDone }: { onDone: (msg: string) => void }) {
         </button>
       </form>
     </Panel>
+  );
+}
+
+const shiftName = (sh: Shift) => `${fmtDate(sh.shift_date, { weekday: "short", day: "numeric", month: "short" })} · Shift ${sh.shift_no} (${fmtTime(sh.starts_at)}–${fmtTime(sh.ends_at)})`;
+
+/** Admin: list a person's duties with Move / Remove (staff asked to change or drop a shift). */
+function DutyManager({
+  person, duties, shifts, onDone,
+}: {
+  person: Staff;
+  duties: Assignment[];
+  shifts: Shift[];
+  onDone: (msg: string, ok?: boolean) => void;
+}) {
+  const [moving, setMoving] = useState<string | null>(null);
+  const [toShift, setToShift] = useState<number>(0);
+  const [toLoc, setToLoc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const byId = new Map(shifts.map((sh) => [sh.id, sh]));
+  const taken = new Set(duties.map((a) => a.shift_id));
+  const locs = LOCATIONS.filter((l) => l.name !== "Shift Leadership" || person.is_leader);
+
+  function startMove(a: Assignment) {
+    setMoving(a.id);
+    setToShift(a.shift_id);
+    setToLoc(a.location);
+  }
+
+  async function saveMove(a: Assignment) {
+    setBusy(true);
+    const { error } = await supabase().rpc("admin_move_assignment", { p_assignment: a.id, p_shift: toShift, p_location: toLoc });
+    setBusy(false);
+    if (error) return onDone(error.message, false);
+    setMoving(null);
+    onDone(`${person.full_name}: duty moved to ${shiftName(byId.get(toShift)!)} at ${toLoc}.`);
+  }
+
+  async function remove(a: Assignment) {
+    const sh = byId.get(a.shift_id)!;
+    if (!confirm(`Remove ${person.full_name} from ${shiftName(sh)} (${a.location})?`)) return;
+    const { error } = await supabase().from("assignments").delete().eq("id", a.id);
+    if (error) return onDone(error.message, false);
+    onDone(`${person.full_name} removed from ${shiftName(sh)}.`);
+  }
+
+  if (duties.length === 0) return <div className="text-xs">No shifts assigned.</div>;
+
+  return (
+    <ul className="divide-y divide-carnival-teal/10 rounded-xl bg-white ring-1 ring-carnival-teal/20">
+      {duties.map((a) => {
+        const sh = byId.get(a.shift_id)!;
+        return (
+          <li key={a.id} className="px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{shiftName(sh)}</span>
+              <span className="text-carnival-ink/70">· {a.location} · {a.responsibility}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${STATUS_META[a.status].chip}`}>{STATUS_META[a.status].label}</span>
+              {a.extra && <span className="rounded bg-carnival-gold px-1.5 py-0.5 text-[10px] font-extrabold">EXTRA</span>}
+              {moving !== a.id && (
+                <span className="ml-auto flex gap-1.5">
+                  <button onClick={() => startMove(a)} className="rounded-lg bg-carnival-sky px-2.5 py-1 text-xs font-bold text-carnival-teal-dark hover:bg-carnival-teal/20">Move</button>
+                  <button onClick={() => remove(a)} className="rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100">Remove</button>
+                </span>
+              )}
+            </div>
+            {moving === a.id && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-carnival-cream p-2">
+                <span className="text-xs font-bold">Move to</span>
+                <select value={toShift} onChange={(e) => setToShift(Number(e.target.value))} aria-label="New shift"
+                  className="rounded-lg border-0 bg-white px-2 py-1.5 text-xs ring-1 ring-carnival-teal/30">
+                  {shifts.map((x) => (
+                    <option key={x.id} value={x.id} disabled={x.id !== a.shift_id && taken.has(x.id)}>
+                      {shiftName(x)}{x.id !== a.shift_id && taken.has(x.id) ? " — already on it" : ""}
+                    </option>
+                  ))}
+                </select>
+                <select value={toLoc} onChange={(e) => setToLoc(e.target.value)} aria-label="New location"
+                  className="rounded-lg border-0 bg-white px-2 py-1.5 text-xs ring-1 ring-carnival-teal/30">
+                  {locs.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+                </select>
+                <button onClick={() => saveMove(a)} disabled={busy || (toShift === a.shift_id && toLoc === a.location)}
+                  className="rounded-lg bg-carnival-red px-3 py-1.5 text-xs font-bold text-white hover:bg-carnival-red-dark disabled:opacity-40">
+                  {busy ? "Saving…" : "Save"}
+                </button>
+                <button onClick={() => setMoving(null)} className="text-xs font-bold text-carnival-ink/60 hover:underline">Cancel</button>
+                {toShift !== a.shift_id && <span className="w-full text-[11px] text-carnival-ink/60">Attendance for this duty resets to “Not marked”.</span>}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

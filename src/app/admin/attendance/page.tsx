@@ -21,7 +21,9 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts, assignments, staff, staffById, dates, setStatus, reload } = useAdmin();
+  const { shifts, assignments, staff, staffById, dates, setStatus, reload, areas } = useAdmin();
+  // leaders limited to areas only see (and count) those locations
+  const visibleLocations = areas.length ? LOCATIONS.filter((l) => areas.includes(l.name)) : LOCATIONS;
   const [notice, setNotice] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -59,7 +61,7 @@ export default function Attendance() {
       .sort((x, y) => x.s.full_name.localeCompare(y.s.full_name));
   }, [assignments, shiftId, staffById, query, filter]);
 
-  const shiftAll = assignments.filter((a) => a.shift_id === shiftId);
+  const shiftAll = assignments.filter((a) => a.shift_id === shiftId && visibleLocations.some((l) => l.name === a.location));
   const inCount = shiftAll.filter((a) => a.status === "present" || a.status === "late").length;
 
   async function mark(ids: string[], status: Status) {
@@ -78,7 +80,14 @@ export default function Attendance() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <Heading>Attendance</Heading>
+        <div>
+          <Heading>Attendance</Heading>
+          {areas.length > 0 && (
+            <div className="mt-1 inline-block rounded-full bg-carnival-gold px-3 py-0.5 text-xs font-extrabold">
+              Your area: {areas.join(", ")}
+            </div>
+          )}
+        </div>
         <div className="text-sm font-semibold">
           <span className="text-2xl font-extrabold text-emerald-700 tabular-nums">{inCount}</span> / {shiftAll.length} checked in
         </div>
@@ -117,8 +126,9 @@ export default function Attendance() {
 
       <AddExtraShift
         shift={shift}
+        locations={visibleLocations}
         staff={staff}
-        onShift={new Set(shiftAll.map((a) => a.staff_id))}
+        onShift={new Set(assignments.filter((a) => a.shift_id === shiftId).map((a) => a.staff_id))}
         onAdded={(msg) => { setError(null); setNotice(msg); reload(); }}
         onError={(msg) => { setNotice(null); setError(msg); }}
       />
@@ -126,7 +136,7 @@ export default function Attendance() {
       {error && <ErrorBox message={error} />}
       {notice && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">✓ {notice}</div>}
 
-      {LOCATIONS.map(({ name, target }) => {
+      {visibleLocations.map(({ name, target }) => {
         const list = rows.filter((r) => r.a.location === name);
         const assigned = shiftAll.filter((a) => a.location === name);
         const present = assigned.filter((a) => a.status === "present" || a.status === "late").length;
@@ -207,9 +217,10 @@ export default function Attendance() {
 
 /** Leaders/admins: put someone on this shift as an extra duty (e.g. a volunteer who stays on). */
 function AddExtraShift({
-  shift, staff, onShift, onAdded, onError,
+  shift, locations, staff, onShift, onAdded, onError,
 }: {
   shift: Shift;
+  locations: { name: string; target: number }[];
   staff: Staff[];
   onShift: Set<string>;
   onAdded: (msg: string) => void;
@@ -262,7 +273,7 @@ function AddExtraShift({
         <select value={location} onChange={(e) => setLocation(e.target.value)} aria-label="Location"
           className="rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30">
           <option value="">Location: where most needed</option>
-          {LOCATIONS.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+          {locations.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm font-semibold">
           <input type="checkbox" checked={present} onChange={(e) => setPresent(e.target.checked)} className="size-4 accent-carnival-red" />
