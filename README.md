@@ -9,7 +9,7 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | `/join` | staff (no login) | Volunteer to join (UID + `@bml.com.mv` email + days); duties are **assigned automatically** |
 | `/winners` | everyone | Daily MVR 2,000 winners + grand iPhone 18 Pro winner |
 | `/admin` | leaders, admins | Live coverage & attendance per day/shift |
-| `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; live sync between devices |
+| `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; **add staff to an extra shift** (tagged EXTRA, removable); live sync between devices |
 | `/admin/staff` | leaders, admins | Per-staff shifts, confirmations, attendance, draw entries; CSV export. Admins: add staff, auto-assign, remove |
 | `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
 | `/admin/reports` | admins | Excel reports (full event, daily, staff, lucky draw, follow-up) |
@@ -25,7 +25,8 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
   (cryptographically random) and stores the full entry list (`pool`, one element per entry) plus `entrants`.
 - One active draw per day and one grand draw. Voiding a win lets you redraw; the voided person is excluded from that redraw.
 - Optional: previous daily winners are excluded from later daily draws (toggle on the draw page). Everyone stays in the grand draw.
-- The spin wheel has one slice per person, sized by their entries, and lands on the database-picked winner.
+- The spin wheel has one equal slice per entry (a name appears once per completed duty, spread around the wheel), shows the
+  name under the pointer live, and lands on one of the database-picked winner's slices.
 
 ## Automatic duty assignment
 

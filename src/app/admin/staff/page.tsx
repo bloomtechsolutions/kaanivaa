@@ -164,6 +164,7 @@ export default function StaffPage() {
                           return (
                             <span key={a.id} className={`rounded-lg px-2 py-1 text-xs font-semibold ring-1 ${STATUS_META[a.status].chip}`}>
                               {fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no} · {a.location} · {STATUS_META[a.status].label}
+                              {a.extra ? " · EXTRA" : ""}
                               {a.confirmed_at ? " · ✓ confirmed" : " · not confirmed"}
                             </span>
                           );

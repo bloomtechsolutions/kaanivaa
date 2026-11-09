@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
 import { ErrorBox, Heading, Panel } from "@/components/ui";
-import { LOCATIONS, RESP_META, STATUS_META, fmtDate, fmtTime, todayMV, type Status } from "@/lib/roster";
+import { supabase } from "@/lib/supabase/client";
+import { LOCATIONS, RESP_META, STATUS_META, fmtDate, fmtTime, todayMV, type Shift, type Staff, type Status } from "@/lib/roster";
 
 const ACTIONS: { status: Status; short: string; cls: string }[] = [
   { status: "present", short: "Present", cls: "bg-emerald-600 text-white" },
@@ -20,7 +21,8 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts, assignments, staffById, dates, setStatus } = useAdmin();
+  const { shifts, assignments, staff, staffById, dates, setStatus, reload } = useAdmin();
+  const [notice, setNotice] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -113,7 +115,16 @@ export default function Attendance() {
         </div>
       </Panel>
 
+      <AddExtraShift
+        shift={shift}
+        staff={staff}
+        onShift={new Set(shiftAll.map((a) => a.staff_id))}
+        onAdded={(msg) => { setError(null); setNotice(msg); reload(); }}
+        onError={(msg) => { setNotice(null); setError(msg); }}
+      />
+
       {error && <ErrorBox message={error} />}
+      {notice && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">✓ {notice}</div>}
 
       {LOCATIONS.map(({ name, target }) => {
         const list = rows.filter((r) => r.a.location === name);
@@ -150,9 +161,15 @@ export default function Attendance() {
                         {a.confirmed_at ? <span className="font-bold text-emerald-700"> · ✓ confirmed</span> : <span className="text-amber-600"> · not confirmed</span>}
                         {a.marked_at && ` · ${STATUS_META[a.status].label} ${new Date(a.marked_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Indian/Maldives" })}`}
                         {a.marked_by && ` by ${a.marked_by.split("@")[0]}`}
+                        {a.extra && a.added_by && ` · extra shift added by ${a.added_by.split("@")[0]}`}
                       </div>
                     </div>
-                    <span className={`ml-auto rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide ${RESP_META[a.responsibility]}`}>{a.responsibility}</span>
+                    {a.extra && (
+                      <span className="ml-auto rounded bg-carnival-gold px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide" title={a.added_by ? `Extra shift added by ${a.added_by}` : "Extra shift"}>
+                        EXTRA
+                      </span>
+                    )}
+                    <span className={`${a.extra ? "" : "ml-auto "}rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide ${RESP_META[a.responsibility]}`}>{a.responsibility}</span>
                   </div>
                   <div className="grid grid-cols-4 gap-1 sm:flex">
                     {ACTIONS.map((act) => {
@@ -165,6 +182,18 @@ export default function Attendance() {
                         </button>
                       );
                     })}
+                    {a.extra && (
+                      <button title="Remove this extra shift" disabled={busyIds.has(a.id)}
+                        onClick={async () => {
+                          if (!confirm(`Remove the extra shift for ${s.full_name}?`)) return;
+                          const { error } = await supabase().rpc("remove_extra_shift", { p_assignment: a.id });
+                          if (error) setError(error.message);
+                          else { setNotice(`Extra shift removed for ${s.full_name}.`); reload(); }
+                        }}
+                        className="col-span-4 rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100 sm:col-span-1">
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -174,5 +203,90 @@ export default function Attendance() {
         );
       })}
     </div>
+  );
+}
+
+/** Leaders/admins: put someone on this shift as an extra duty (e.g. a volunteer who stays on). */
+function AddExtraShift({
+  shift, staff, onShift, onAdded, onError,
+}: {
+  shift: Shift;
+  staff: Staff[];
+  onShift: Set<string>;
+  onAdded: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [location, setLocation] = useState("");
+  const [present, setPresent] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const term = q.trim().toLowerCase();
+  const matches = term.length < 2 ? [] : staff
+    .filter((s) => !onShift.has(s.id) && `${s.full_name} ${s.uid ?? ""} ${s.email ?? ""}`.toLowerCase().includes(term))
+    .slice(0, 8);
+
+  async function add(s: Staff) {
+    setBusy(s.id);
+    const { data, error } = await supabase().rpc("add_extra_shift", {
+      p_staff: s.id, p_shift: shift.id, p_location: location || null, p_present: present,
+    });
+    setBusy(null);
+    if (error) return onError(error.message);
+    const loc = (data as { location: string }).location;
+    setQ("");
+    onAdded(`${s.full_name} added to Shift ${shift.shift_no} (${fmtDate(shift.shift_date)}) at ${loc}${present ? " and marked present" : ""}.`);
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="w-full rounded-2xl border-2 border-dashed border-carnival-teal/40 bg-white/60 px-4 py-2.5 text-sm font-bold text-carnival-teal-dark hover:bg-white">
+        + Add staff to this shift (extra shift)
+      </button>
+    );
+  }
+
+  return (
+    <Panel className="space-y-3 p-4 ring-2 ring-carnival-gold">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-extrabold">Add staff to Shift {shift.shift_no} · {fmtDate(shift.shift_date)} {fmtTime(shift.starts_at)}–{fmtTime(shift.ends_at)}</div>
+          <p className="text-xs text-carnival-ink/70">For someone taking an extra shift on top of their assigned duties. Each completed duty is a lucky draw entry.</p>
+        </div>
+        <button onClick={() => setOpen(false)} className="text-sm font-bold text-carnival-ink/60 hover:text-carnival-ink">✕</button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search staff name or UID…" type="search" autoFocus
+          className="w-full min-w-0 rounded-xl border-0 bg-white px-3 py-2 ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none sm:w-auto sm:flex-1" />
+        <select value={location} onChange={(e) => setLocation(e.target.value)} aria-label="Location"
+          className="rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30">
+          <option value="">Location: where most needed</option>
+          {LOCATIONS.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+        </select>
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={present} onChange={(e) => setPresent(e.target.checked)} className="size-4 accent-carnival-red" />
+          Mark present now
+        </label>
+      </div>
+      {term.length >= 2 && (
+        <ul className="divide-y divide-carnival-teal/10 rounded-xl bg-white ring-1 ring-carnival-teal/20">
+          {matches.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate font-bold">{s.full_name}</div>
+                <div className="text-xs text-carnival-ink/60">{s.uid ?? "no UID"}{s.is_leader ? " · leader" : ""}</div>
+              </div>
+              <button onClick={() => add(s)} disabled={busy !== null}
+                className="shrink-0 rounded-lg bg-carnival-red px-3 py-1.5 text-xs font-bold text-white hover:bg-carnival-red-dark disabled:opacity-50">
+                {busy === s.id ? "Adding…" : "Add to shift"}
+              </button>
+            </li>
+          ))}
+          {matches.length === 0 && <li className="px-3 py-2 text-sm text-carnival-ink/60">No match (people already on this shift are hidden).</li>}
+        </ul>
+      )}
+    </Panel>
   );
 }

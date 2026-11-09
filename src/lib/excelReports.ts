@@ -149,7 +149,7 @@ function rosterSheet(wb: Workbook, d: ReportData, name: string, title: string, d
       `Shift ${sh.shift_no}`,
       `${fmtTime(sh.starts_at)}–${fmtTime(sh.ends_at)}`,
       a.location,
-      a.responsibility,
+      a.responsibility + (a.extra ? " (extra)" : ""),
       st.full_name,
       st.uid,
       st.email,
@@ -163,7 +163,7 @@ function rosterSheet(wb: Workbook, d: ReportData, name: string, title: string, d
     wb, name, title,
     [
       { header: "Date", width: 13 }, { header: "Shift", width: 8 }, { header: "Timing", width: 12 },
-      { header: "Location", width: 17 }, { header: "Role", width: 8 }, { header: "Staff name", width: 30 },
+      { header: "Location", width: 17 }, { header: "Role", width: 13 }, { header: "Staff name", width: 30 },
       { header: "UID", width: 9 }, { header: "Email", width: 26 }, { header: "Confirmed", width: 10 },
       { header: "Confirmed at", width: 19 }, { header: "Attendance", width: 11 }, { header: "Marked at", width: 19 },
       { header: "Marked by", width: 24 },

@@ -32,6 +32,9 @@ export interface Assignment {
   marked_by: string | null;
   note: string | null;
   confirmed_at: string | null;
+  /** added by a leader/admin as an extra shift */
+  extra: boolean;
+  added_by: string | null;
 }
 
 export interface Draw {

@@ -23,6 +23,9 @@ interface Entry {
 interface Stage {
   target: Target;
   entries: Entry[];
+  /** one staff id per wheel slice (= per entry), repeats spread round-robin */
+  wheel: string[];
+  winnerId: string | null;
   winnerIndex: number | null;
   winner: string | null;
   spinning: boolean;
@@ -53,6 +56,19 @@ export default function DrawPage() {
   };
   const totalOf = (e: Entry[]) => e.reduce((s, x) => s + x.n, 0);
 
+  /**
+   * Wheel slices, one per entry. Each person's entries are spread evenly around the circle
+   * (entry j of a person with n entries sits at position (j + offset) / n, with a per-person
+   * offset), so the same name doesn't end up in neighbouring slices.
+   */
+  const toWheel = (e: Entry[]): string[] => {
+    const P = e.length || 1;
+    return e
+      .flatMap((x, pi) => Array.from({ length: x.n }, (_, j) => ({ id: x.id, key: (j + (pi + 0.5) / P) / x.n })))
+      .sort((a, b) => a.key - b.key)
+      .map((x) => x.id);
+  };
+
   /** Mirrors public.draw_pool(): one entry per completed (present/late) duty. */
   function pool(t: Target): Entry[] {
     const voidedHere = new Set(draws.filter((d) => d.voided && d.kind === t.kind && d.draw_date === t.date).map((d) => d.staff_id));
@@ -73,7 +89,8 @@ export default function DrawPage() {
 
   function openStage(t: Target) {
     setError(null);
-    setStage({ target: t, entries: pool(t), winnerIndex: null, winner: null, spinning: false, settled: false });
+    const entries = pool(t);
+    setStage({ target: t, entries, wheel: toWheel(entries), winnerId: null, winnerIndex: null, winner: null, spinning: false, settled: false });
   }
 
   async function spin() {
@@ -92,7 +109,11 @@ export default function DrawPage() {
     const draw = data as Draw;
     // Use the database's entry list so the wheel shows exactly who was in the draw, with their entries.
     const entries = toEntries(draw.pool);
-    setStage({ ...stage, entries, spinning: true, winnerIndex: entries.findIndex((e) => e.id === draw.staff_id), winner: name(draw.staff_id) });
+    const wheel = toWheel(entries);
+    // land on one of the winner's slices (any of them — each is one of their entries)
+    const slots = wheel.flatMap((id, i) => (id === draw.staff_id ? [i] : []));
+    const winnerIndex = slots[Math.floor(Math.random() * slots.length)] ?? 0;
+    setStage({ ...stage, entries, wheel, spinning: true, winnerId: draw.staff_id, winnerIndex, winner: name(draw.staff_id) });
     reload();
   }
 
@@ -112,7 +133,7 @@ export default function DrawPage() {
           <b>Every completed duty is one entry</b> (marked <b>Present</b> or <b>Late</b>). Daily draw: duties completed that
           day (up to 3). Grand draw: all duties completed (up to 12) — someone with 12 completed duties has 12× the chance
           of someone with 1. The winning entry is picked in the database with a cryptographically random choice and saved
-          with the full entry list; the wheel (one slice per person, sized by their entries) then spins to that name.
+          with the full entry list; the wheel (one slice per entry, so each name appears once per completed duty) then spins to that name.
         </p>
         <label className="mt-3 flex items-center gap-2 font-semibold">
           <input type="checkbox" checked={excludePrev} onChange={(e) => setExcludePrev(e.target.checked)} className="size-4 accent-carnival-red" />
@@ -212,7 +233,7 @@ export default function DrawPage() {
               </div>
 
               <div className="mt-4 grid items-center gap-6 lg:grid-cols-[1fr_260px]">
-                <SpinWheel items={stage.entries.map((e) => ({ name: name(e.id), weight: e.n }))} targetIndex={stage.winnerIndex} onSettled={onSettled} />
+                <SpinWheel entries={stage.wheel.map(name)} targetIndex={stage.winnerIndex} onSettled={onSettled} />
                 <div className="space-y-3">
                   <div className="min-h-28 rounded-2xl bg-white p-4 text-center ring-1 ring-carnival-teal/20">
                     {stage.settled && stage.winner ? (
@@ -240,8 +261,8 @@ export default function DrawPage() {
                       <span>Staff</span><span>Entries</span>
                     </div>
                     <ol className="max-h-64 space-y-0.5 overflow-y-auto text-sm">
-                      {stage.entries.map((e, i) => (
-                        <li key={e.id} className={`flex justify-between gap-2 rounded px-1.5 ${stage.settled && i === stage.winnerIndex ? "bg-carnival-gold font-extrabold" : ""}`}>
+                      {stage.entries.map((e) => (
+                        <li key={e.id} className={`flex justify-between gap-2 rounded px-1.5 ${stage.settled && e.id === stage.winnerId ? "bg-carnival-gold font-extrabold" : ""}`}>
                           <span className="truncate">{name(e.id)}</span>
                           <span className="tabular-nums">{e.n}</span>
                         </li>
