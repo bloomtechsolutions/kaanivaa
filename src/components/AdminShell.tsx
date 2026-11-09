@@ -26,6 +26,7 @@ const NAV = [
   { href: "/admin/staff", label: "Staff" },
   { href: "/admin/draw", label: "Lucky draw", adminOnly: true },
   { href: "/admin/users", label: "Users", adminOnly: true },
+  { href: "/admin/reset", label: "Reset", adminOnly: true },
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
