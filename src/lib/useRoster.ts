@@ -104,16 +104,18 @@ export function useRole() {
   const [role, setRole] = useState<"admin" | "leader" | null | undefined>(undefined);
   const [email, setEmail] = useState<string | null>(null);
   const [areas, setAreas] = useState<string[]>([]);
+  const [shiftIds, setShiftIds] = useState<number[]>([]);
   useEffect(() => {
     const db = supabase();
     db.auth.getUser().then(async ({ data }) => {
       const e = data.user?.email?.toLowerCase() ?? null;
       setEmail(e);
       if (!e) return setRole(null);
-      const { data: row } = await db.from("app_users").select("role, areas").eq("email", e).maybeSingle();
+      const { data: row } = await db.from("app_users").select("role, areas, shift_ids").eq("email", e).maybeSingle();
       setAreas((row?.areas as string[] | undefined) ?? []);
+      setShiftIds((row?.shift_ids as number[] | undefined) ?? []);
       setRole((row?.role as "admin" | "leader" | undefined) ?? null);
     });
   }, []);
-  return { role, email, areas };
+  return { role, email, areas, shiftIds };
 }

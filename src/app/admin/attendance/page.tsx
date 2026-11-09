@@ -21,7 +21,13 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts, assignments, staff, staffById, dates, setStatus, reload, areas } = useAdmin();
+  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, areas, shiftIds } = useAdmin();
+  // leaders limited to shifts only see those days/shifts
+  const shifts = useMemo(
+    () => (shiftIds.length ? allShifts.filter((s) => shiftIds.includes(s.id)) : allShifts),
+    [allShifts, shiftIds],
+  );
+  const dates = useMemo(() => [...new Set(shifts.map((s) => s.shift_date))], [shifts]);
   // leaders limited to areas only see (and count) those locations
   const visibleLocations = areas.length ? LOCATIONS.filter((l) => areas.includes(l.name)) : LOCATIONS;
   const [notice, setNotice] = useState<string | null>(null);
@@ -82,9 +88,16 @@ export default function Attendance() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <Heading>Attendance</Heading>
-          {areas.length > 0 && (
-            <div className="mt-1 inline-block rounded-full bg-carnival-gold px-3 py-0.5 text-xs font-extrabold">
-              Your area: {areas.join(", ")}
+          {(areas.length > 0 || shiftIds.length > 0) && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {areas.length > 0 && (
+                <span className="rounded-full bg-carnival-gold px-3 py-0.5 text-xs font-extrabold">Your area: {areas.join(", ")}</span>
+              )}
+              {shiftIds.length > 0 && (
+                <span className="rounded-full bg-carnival-teal px-3 py-0.5 text-xs font-extrabold text-white">
+                  Your shifts: {shifts.map((s) => `${fmtDate(s.shift_date, { day: "numeric", month: "short" })} S${s.shift_no}`).join(", ")}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -96,7 +109,7 @@ export default function Attendance() {
       <Panel className="space-y-3 p-3">
         <div className="flex gap-2 overflow-x-auto">
           {dates.map((d) => (
-            <button key={d} onClick={() => setShiftId(shifts.find((s) => s.shift_date === d && s.shift_no === shift.shift_no)?.id ?? shiftId)}
+            <button key={d} onClick={() => setShiftId((shifts.find((s) => s.shift_date === d && s.shift_no === shift.shift_no) ?? shifts.find((s) => s.shift_date === d))?.id ?? shiftId)}
               className={`rounded-xl px-3 py-2 text-sm font-bold whitespace-nowrap ${d === shift.shift_date ? "bg-carnival-teal text-white" : "bg-carnival-sky hover:bg-carnival-teal/15"}`}>
               {fmtDate(d)}{d === todayMV() ? " · Today" : ""}
             </button>

@@ -4,17 +4,18 @@ import { useCallback, useEffect, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
 import { ErrorBox, Heading, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
-import { LOCATIONS } from "@/lib/roster";
+import { LOCATIONS, fmtDate, fmtTime } from "@/lib/roster";
 
 interface AppUser {
   email: string;
   role: "admin" | "leader";
   areas: string[];
+  shift_ids: number[];
   created_at: string;
 }
 
 export default function Users() {
-  const { role, email: me } = useAdmin();
+  const { role, email: me, shifts, staff, assignments } = useAdmin();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [email, setEmail] = useState("");
   const [newRole, setNewRole] = useState<"leader" | "admin">("leader");
@@ -42,6 +43,29 @@ export default function Users() {
     load();
   }
 
+  async function saveShifts(u: AppUser, shift_ids: number[]) {
+    setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, shift_ids } : x)));
+    const { error } = await supabase().from("app_users").update({ shift_ids }).eq("email", u.email);
+    if (error) {
+      setError(error.message);
+      load();
+    }
+  }
+
+  function toggleShift(u: AppUser, id: number) {
+    saveShifts(u, u.shift_ids.includes(id) ? u.shift_ids.filter((x) => x !== id) : [...u.shift_ids, id].sort((a, b) => a - b));
+  }
+
+  /** Tick the shifts this leader is rostered on (matched by email to the staff list). */
+  function applyRosterShifts(u: AppUser) {
+    const person = staff.find((p) => p.email?.toLowerCase() === u.email.toLowerCase());
+    if (!person) return setError(`${u.email} isn't on the staff list, so their roster shifts can't be looked up — tick shifts manually.`);
+    const ids = [...new Set(assignments.filter((a) => a.staff_id === person.id).map((a) => a.shift_id))].sort((a, b) => a - b);
+    if (!ids.length) return setError(`${person.full_name} has no shifts on the roster.`);
+    setError(null);
+    saveShifts(u, ids);
+  }
+
   async function toggleArea(u: AppUser, area: string) {
     const areas = u.areas.includes(area) ? u.areas.filter((a) => a !== area) : [...u.areas, area];
     setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, areas } : x)));
@@ -64,8 +88,8 @@ export default function Users() {
       <Heading>Console users</Heading>
       <Panel className="p-4 text-sm">
         <p>
-          <b>Leaders</b> mark attendance and can add staff to extra shifts. Give a leader one or more <b>areas</b> and they
-          will only see and manage staff in those areas (no area = all areas). <b>Admins</b> see everything, run lucky draws,
+          <b>Leaders</b> mark attendance and can add staff to extra shifts. Give a leader <b>areas</b> and <b>shifts</b> and they
+          will only see and manage staff in those areas and shifts (none ticked = all). <b>Admins</b> see everything, run lucky draws,
           change duties and manage users.
         </p>
         <p className="mt-2 text-carnival-ink/70">
@@ -95,7 +119,11 @@ export default function Users() {
                 <div className="font-semibold">{u.email}</div>
                 <div className={`text-xs font-bold uppercase ${u.role === "admin" ? "text-carnival-red" : "text-carnival-teal-dark"}`}>
                   {u.role}
-                  {u.role === "leader" && <span className="ml-1 font-semibold normal-case text-carnival-ink/60">· {u.areas.length ? u.areas.join(", ") : "all areas"}</span>}
+                  {u.role === "leader" && (
+                    <span className="ml-1 font-semibold normal-case text-carnival-ink/60">
+                      · {u.areas.length ? u.areas.join(", ") : "all areas"} · {u.shift_ids.length ? `${u.shift_ids.length} shift${u.shift_ids.length === 1 ? "" : "s"}` : "all shifts"}
+                    </span>
+                  )}
                 </div>
               </div>
               {u.email !== me && (
@@ -113,6 +141,34 @@ export default function Users() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {u.role === "leader" && (
+              <div className="mt-2 rounded-xl bg-carnival-sky/50 p-2" role="group" aria-label={`Shifts for ${u.email}`}>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-carnival-ink/70">Shifts {u.shift_ids.length ? "" : "(none ticked = all shifts)"}</span>
+                  <span className="flex gap-2">
+                    <button onClick={() => applyRosterShifts(u)} className="text-xs font-bold text-carnival-teal-dark hover:underline">Use their roster shifts</button>
+                    {u.shift_ids.length > 0 && <button onClick={() => saveShifts(u, [])} className="text-xs font-bold text-carnival-ink/60 hover:underline">Clear</button>}
+                  </span>
+                </div>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {[...new Set(shifts.map((x) => x.shift_date))].map((d) => (
+                    <div key={d} className="flex flex-wrap items-center gap-1">
+                      <span className="w-14 text-[11px] font-bold">{fmtDate(d, { day: "numeric", month: "short" })}</span>
+                      {shifts.filter((x) => x.shift_date === d).map((x) => {
+                        const on = u.shift_ids.includes(x.id);
+                        return (
+                          <button key={x.id} onClick={() => toggleShift(u, x.id)} aria-pressed={on}
+                            title={`Shift ${x.shift_no} · ${fmtTime(x.starts_at)}–${fmtTime(x.ends_at)}`}
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${on ? "bg-carnival-red text-white ring-carnival-red" : "bg-white ring-carnival-teal/30 hover:bg-carnival-cream"}`}>
+                            S{x.shift_no}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

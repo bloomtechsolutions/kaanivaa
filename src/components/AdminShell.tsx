@@ -12,6 +12,8 @@ interface AdminCtx extends RosterData {
   email: string | null;
   /** locations this leader is limited to; empty = all (always empty for admins) */
   areas: string[];
+  /** shifts this leader is limited to; empty = all (always empty for admins) */
+  shiftIds: number[];
 }
 
 const Ctx = createContext<AdminCtx | null>(null);
@@ -33,7 +35,7 @@ const NAV = [
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
-  const { role, email, areas } = useRole();
+  const { role, email, areas, shiftIds } = useRole();
   const roster = useRoster();
   const pathname = usePathname();
 
@@ -52,7 +54,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </div>
     );
   else if (roster.error) body = <ErrorBox message={roster.error} />;
-  else body = <Ctx.Provider value={{ ...roster, role, email, areas: role === "admin" ? [] : areas }}>{children}</Ctx.Provider>;
+  else body = <Ctx.Provider value={{ ...roster, role, email, areas: role === "admin" ? [] : areas, shiftIds: role === "admin" ? [] : shiftIds }}>{children}</Ctx.Provider>;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">

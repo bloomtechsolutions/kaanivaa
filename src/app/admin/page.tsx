@@ -12,7 +12,12 @@ function tally(list: Assignment[]) {
 }
 
 export default function Overview() {
-  const { shifts, assignments, staff, draws, dates } = useAdmin();
+  const { shifts: allShifts, assignments: allAssignments, staff, draws, areas, shiftIds } = useAdmin();
+  // leaders limited to shifts/areas see only their part of the event
+  const shifts = shiftIds.length ? allShifts.filter((s) => shiftIds.includes(s.id)) : allShifts;
+  const shiftSet = new Set(shifts.map((s) => s.id));
+  const assignments = allAssignments.filter((a) => shiftSet.has(a.shift_id) && (!areas.length || areas.includes(a.location)));
+  const dates = [...new Set(shifts.map((s) => s.shift_date))];
   const today = todayMV();
   const all = tally(assignments);
   const marked = all.total - all.pending;
