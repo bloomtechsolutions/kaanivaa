@@ -67,6 +67,9 @@ export function useRoster(): RosterData {
           return next;
         });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, () => {
+        db.from("staff").select("*").order("full_name").then(({ data }) => data && setStaff(data as Staff[]));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "draws" }, () => {
         db.from("draws").select("*").order("drawn_at").then(({ data }) => data && setDraws(data as Draw[]));
       })

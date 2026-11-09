@@ -45,6 +45,11 @@ export default function Home() {
           </Link>
         </section>
 
+        <Link href="/join" className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-carnival-gold px-6 py-4 font-bold shadow-md transition hover:-translate-y-0.5">
+          <span><span className="font-display text-xl">Want to help?</span> <span className="block text-sm font-semibold sm:inline">Join the crew — we&apos;ll assign your duties automatically.</span></span>
+          <span className="whitespace-nowrap">Join →</span>
+        </Link>
+
         <section className="mt-8">
           <div className="relative mx-auto max-w-3xl rounded-3xl border-2 border-carnival-teal/60 bg-white/90 px-6 pb-6 pt-8 shadow-sm">
             <h2 className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-carnival-sky px-4 font-display text-2xl text-carnival-teal-dark sm:text-3xl">

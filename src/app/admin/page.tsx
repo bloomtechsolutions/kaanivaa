@@ -16,6 +16,7 @@ export default function Overview() {
   const today = todayMV();
   const all = tally(assignments);
   const marked = all.total - all.pending;
+  const confirmed = assignments.filter((a) => a.confirmed_at).length;
   const attendedStaff = new Set(assignments.filter((a) => ATTENDED.includes(a.status)).map((a) => a.staff_id));
   const activeDraws = draws.filter((d) => !d.voided);
 
@@ -23,9 +24,10 @@ export default function Overview() {
     <div className="space-y-6">
       <Heading>Overview</Heading>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Kpi label="Registered staff" value={staff.length} sub={`${staff.filter((s) => s.is_leader).length} leaders`} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Kpi label="Registered staff" value={staff.length} sub={`${staff.filter((s) => s.is_leader).length} leaders · ${staff.filter((s) => s.source !== "roster").length} new`} />
         <Kpi label="Shift assignments" value={all.total} sub={`${shifts.length} shifts over ${dates.length} days`} />
+        <Kpi label="Duties confirmed" value={`${all.total ? Math.round((confirmed / all.total) * 100) : 0}%`} sub={`${confirmed} of ${all.total} by staff`} />
         <Kpi label="Attendance marked" value={`${all.total ? Math.round((marked / all.total) * 100) : 0}%`} sub={`${marked} of ${all.total}`} />
         <Kpi label="In grand draw" value={attendedStaff.size} sub={`${activeDraws.length} of ${dates.length + 1} draws done`} />
       </div>

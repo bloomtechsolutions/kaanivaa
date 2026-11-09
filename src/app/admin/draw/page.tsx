@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
+import SpinWheel from "@/components/SpinWheel";
 import { ErrorBox, Heading, Marquee, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
 import { ATTENDED, fmtDate, type Draw } from "@/lib/roster";
@@ -13,17 +14,23 @@ interface Target {
   prize: string;
 }
 
+interface Stage {
+  target: Target;
+  ids: string[];
+  winnerIndex: number | null;
+  winner: string | null;
+  spinning: boolean;
+  settled: boolean;
+}
+
 export default function DrawPage() {
   const { role, dates, draws, assignments, shiftById, staffById, reload } = useAdmin();
   const [excludePrev, setExcludePrev] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState<{ target: Target; names: string[]; winner: string | null } | null>(null);
-  const [shown, setShown] = useState("");
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [openList, setOpenList] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current) clearInterval(timer.current);
-  }, []);
+  const onSettled = useCallback(() => setStage((s) => (s ? { ...s, settled: true, spinning: false } : s)), []);
 
   if (role !== "admin") return <ErrorBox message="Only admins can run the lucky draw." />;
 
@@ -31,8 +38,10 @@ export default function DrawPage() {
     ...dates.map((d) => ({ kind: "daily" as const, date: d, title: fmtDate(d, { weekday: "long", day: "numeric", month: "long" }), prize: "MVR 2,000 to Swipe wallet" })),
     { kind: "grand", date: null, title: "Grand draw", prize: "iPhone 18 Pro" },
   ];
+  const name = (id: string) => staffById.get(id)?.full_name ?? "Unknown";
+  const byName = (a: string, b: string) => name(a).localeCompare(name(b));
 
-  /** Mirrors public.draw_pool() so organisers can see who is in before drawing. */
+  /** Mirrors public.draw_pool() so organisers can see exactly who is in before drawing. */
   function pool(t: Target) {
     const voidedHere = new Set(draws.filter((d) => d.voided && d.kind === t.kind && d.draw_date === t.date).map((d) => d.staff_id));
     const dailyWinners = new Set(draws.filter((d) => !d.voided && d.kind === "daily").map((d) => d.staff_id));
@@ -44,39 +53,39 @@ export default function DrawPage() {
       if (t.kind === "daily" && excludePrev && dailyWinners.has(a.staff_id)) continue;
       ids.add(a.staff_id);
     }
-    return [...ids];
+    return [...ids].sort(byName);
   }
 
   const activeFor = (t: Target) => draws.find((d) => !d.voided && d.kind === t.kind && d.draw_date === t.date);
+  const keyOf = (t: Target) => t.kind + (t.date ?? "");
 
-  async function run(t: Target) {
-    const ids = pool(t);
-    if (ids.length === 0) return setError("Nobody is eligible yet — mark attendance first.");
-    if (!confirm(`Draw the ${t.title.toLowerCase().includes("grand") ? "grand prize" : `daily prize for ${t.title}`} from ${ids.length} eligible staff?`)) return;
+  function openStage(t: Target) {
     setError(null);
-    const names = ids.map((id) => staffById.get(id)!.full_name);
-    setStage({ target: t, names, winner: null });
-    timer.current = setInterval(() => setShown(names[Math.floor(Math.random() * names.length)]), 70);
+    setStage({ target: t, ids: pool(t), winnerIndex: null, winner: null, spinning: false, settled: false });
+  }
 
-    // Let the name reel spin for at least 3.5s while the database picks the winner.
-    const [{ data, error }] = await Promise.all([
-      supabase().rpc("run_draw", { p_kind: t.kind, p_date: t.date, p_exclude_previous: excludePrev }),
-      new Promise((r) => setTimeout(r, 3500)),
-    ]);
-    if (timer.current) clearInterval(timer.current);
+  async function spin() {
+    if (!stage || stage.spinning || stage.winner) return;
+    setStage({ ...stage, spinning: true });
+    const { data, error } = await supabase().rpc("run_draw", {
+      p_kind: stage.target.kind,
+      p_date: stage.target.date,
+      p_exclude_previous: excludePrev,
+    });
     if (error) {
-      setStage(null);
+      setStage({ ...stage, spinning: false });
       setError(error.message);
       return;
     }
-    const winner = staffById.get((data as Draw).staff_id)!.full_name;
-    setShown(winner);
-    setStage((s) => (s ? { ...s, winner } : s));
+    const draw = data as Draw;
+    // Use the database's entry list so the wheel shows exactly who was in the draw.
+    const ids = [...draw.pool].sort(byName);
+    setStage({ ...stage, ids, spinning: true, winnerIndex: ids.indexOf(draw.staff_id), winner: name(draw.staff_id) });
     reload();
   }
 
   async function voidDraw(d: Draw) {
-    const reason = prompt(`Void the win for ${staffById.get(d.staff_id)?.full_name}? Enter a reason (e.g. not present to claim):`);
+    const reason = prompt(`Void the win for ${name(d.staff_id)}? Enter a reason (e.g. not present to claim):`);
     if (reason === null) return;
     const { error } = await supabase().rpc("void_draw", { p_draw: d.id, p_reason: reason });
     if (error) setError(error.message);
@@ -89,7 +98,8 @@ export default function DrawPage() {
       <Panel className="p-4 text-sm">
         <p>
           Eligible = staff marked <b>Present</b> or <b>Late</b>. Daily draw: attended that day. Grand draw: attended any shift.
-          Winners are picked in the database with a cryptographically random choice and recorded with the full entry list.
+          The winner is picked in the database with a cryptographically random choice and saved with the full entry list —
+          the wheel then spins to that name.
         </p>
         <label className="mt-3 flex items-center gap-2 font-semibold">
           <input type="checkbox" checked={excludePrev} onChange={(e) => setExcludePrev(e.target.checked)} className="size-4 accent-carnival-red" />
@@ -102,10 +112,11 @@ export default function DrawPage() {
         {targets.map((t) => {
           const active = activeFor(t);
           const voided = draws.filter((d) => d.voided && d.kind === t.kind && d.draw_date === t.date);
-          const eligible = pool(t).length;
+          const eligible = active ? [...active.pool].sort(byName) : pool(t);
           const grand = t.kind === "grand";
+          const k = keyOf(t);
           return (
-            <Panel key={t.kind + t.date} className={`overflow-hidden ${grand ? "md:col-span-2 ring-2 ring-carnival-gold" : ""}`}>
+            <Panel key={k} className={`overflow-hidden ${grand ? "md:col-span-2 ring-2 ring-carnival-gold" : ""}`}>
               <div className={`flex items-center justify-between px-4 py-2 text-white ${grand ? "bg-carnival-red" : "bg-carnival-teal"}`}>
                 <span className="font-bold">{t.title}</span>
                 <span className="text-sm font-semibold">{t.prize}</span>
@@ -115,7 +126,7 @@ export default function DrawPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-bold uppercase tracking-wide text-carnival-ink/60">Winner</div>
-                      <div className="font-display text-2xl text-carnival-red">{staffById.get(active.staff_id)?.full_name}</div>
+                      <div className="font-display text-2xl text-carnival-red">{name(active.staff_id)}</div>
                       <div className="text-xs text-carnival-ink/60">
                         {staffById.get(active.staff_id)?.uid} · drawn from {active.pool_size} on{" "}
                         {new Date(active.drawn_at).toLocaleString("en-GB", { timeZone: "Indian/Maldives", dateStyle: "medium", timeStyle: "short" })}
@@ -128,17 +139,35 @@ export default function DrawPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm"><b className="text-xl tabular-nums">{eligible}</b> eligible staff</div>
-                    <button onClick={() => run(t)} disabled={eligible === 0 || stage !== null}
+                    <div className="text-sm"><b className="text-xl tabular-nums">{eligible.length}</b> eligible staff</div>
+                    <button onClick={() => openStage(t)} disabled={eligible.length === 0}
                       className="rounded-xl bg-carnival-red px-5 py-2.5 font-bold text-white shadow hover:bg-carnival-red-dark disabled:opacity-40">
-                      🎉 Draw winner
+                      🎡 Open spin wheel
                     </button>
                   </div>
                 )}
+
+                {eligible.length > 0 && (
+                  <div className="mt-3 border-t border-carnival-teal/10 pt-2">
+                    <button onClick={() => setOpenList(openList === k ? null : k)} className="text-xs font-bold text-carnival-teal-dark hover:underline">
+                      {openList === k ? "Hide" : "Show"} {active ? "entries in this draw" : "eligible staff"} ({eligible.length})
+                    </button>
+                    {openList === k && (
+                      <ul className="mt-2 flex max-h-56 flex-wrap gap-1.5 overflow-y-auto">
+                        {eligible.map((id) => (
+                          <li key={id} className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${active?.staff_id === id ? "bg-carnival-gold ring-carnival-gold" : "bg-carnival-sky ring-carnival-teal/20"}`}>
+                            {name(id)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
                 {voided.length > 0 && (
                   <ul className="mt-3 space-y-0.5 border-t border-carnival-teal/10 pt-2 text-xs text-carnival-ink/60">
                     {voided.map((d) => (
-                      <li key={d.id}><s>{staffById.get(d.staff_id)?.full_name}</s> — voided{d.void_reason ? `: ${d.void_reason}` : ""}</li>
+                      <li key={d.id}><s>{name(d.staff_id)}</s> — voided{d.void_reason ? `: ${d.void_reason}` : ""}</li>
                     ))}
                   </ul>
                 )}
@@ -149,26 +178,56 @@ export default function DrawPage() {
       </div>
 
       {stage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carnival-ink/70 p-4 backdrop-blur-sm" role="dialog" aria-modal>
-          <Marquee className="w-full max-w-2xl">
-            <div className="py-6 text-center">
-              <div className="text-sm font-bold uppercase tracking-widest text-carnival-teal-dark">{stage.target.title}</div>
-              <div className="mt-1 text-lg font-bold">{stage.target.prize}</div>
-              <div className="mt-6 flex min-h-24 items-center justify-center">
-                <div key={stage.winner ?? "spin"} className={`font-display text-3xl sm:text-5xl ${stage.winner ? "text-carnival-red pop-in" : "text-carnival-ink/70"}`}>
-                  {shown}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-carnival-ink/80 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal aria-label={`${stage.target.title} spin wheel`}>
+          <div className="mx-auto max-w-5xl">
+            <Marquee>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold uppercase tracking-widest text-carnival-teal-dark">{stage.target.title}</div>
+                  <div className="font-display text-2xl text-carnival-red sm:text-3xl">{stage.target.prize}</div>
+                </div>
+                {!stage.spinning && (
+                  <button onClick={() => setStage(null)} className="rounded-full bg-white px-3 py-1.5 text-sm font-bold ring-1 ring-carnival-teal/30 hover:bg-carnival-sky">
+                    ✕ Close
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-4 grid items-center gap-6 lg:grid-cols-[1fr_260px]">
+                <SpinWheel names={stage.ids.map(name)} targetIndex={stage.winnerIndex} onSettled={onSettled} />
+                <div className="space-y-3">
+                  <div className="min-h-28 rounded-2xl bg-white p-4 text-center ring-1 ring-carnival-teal/20">
+                    {stage.settled && stage.winner ? (
+                      <div className="pop-in">
+                        <div className="text-3xl" aria-hidden>🎉🏆🎉</div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-carnival-teal-dark">Winner</div>
+                        <div className="font-display text-2xl leading-tight text-carnival-red">{stage.winner}</div>
+                      </div>
+                    ) : stage.spinning ? (
+                      <div className="py-6 font-display text-xl text-carnival-teal-dark">Spinning…</div>
+                    ) : (
+                      <>
+                        <div className="text-sm text-carnival-ink/70"><b className="text-2xl text-carnival-ink">{stage.ids.length}</b> staff on the wheel</div>
+                        <button onClick={spin} className="mt-3 w-full rounded-xl bg-carnival-red py-3 font-display text-xl text-white shadow-lg hover:bg-carnival-red-dark">
+                          SPIN!
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="rounded-2xl bg-white/80 p-3 ring-1 ring-carnival-teal/20">
+                    <div className="mb-1 text-xs font-bold uppercase tracking-wide text-carnival-ink/60">Entries</div>
+                    <ol className="max-h-64 space-y-0.5 overflow-y-auto text-sm">
+                      {stage.ids.map((id, i) => (
+                        <li key={id} className={`truncate rounded px-1.5 ${stage.settled && i === stage.winnerIndex ? "bg-carnival-gold font-extrabold" : ""}`}>
+                          {name(id)}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 </div>
               </div>
-              <div className="mt-2 text-sm text-carnival-ink/60">
-                {stage.winner ? "Congratulations! 🎊" : `Drawing from ${stage.names.length} staff…`}
-              </div>
-              {stage.winner && (
-                <button onClick={() => setStage(null)} className="mt-6 rounded-xl bg-carnival-teal px-6 py-2.5 font-bold text-white hover:bg-carnival-teal-dark">
-                  Close
-                </button>
-              )}
-            </div>
-          </Marquee>
+            </Marquee>
+          </div>
         </div>
       )}
     </div>

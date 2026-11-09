@@ -20,12 +20,13 @@ export function Heading({ children, className = "" }: { children: ReactNode; cla
 
 export function PublicHeader() {
   return (
-    <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3">
-      <Link href="/" className="font-display text-xl text-carnival-red">Kaanivaa 44</Link>
-      <nav className="flex gap-1 text-sm font-semibold">
-        <Link className="rounded-full px-3 py-1.5 hover:bg-white/70" href="/me">My duty</Link>
-        <Link className="rounded-full px-3 py-1.5 hover:bg-white/70" href="/winners">Winners</Link>
-        <Link className="rounded-full bg-carnival-teal px-3 py-1.5 text-white hover:bg-carnival-teal-dark" href="/admin">Admin</Link>
+    <header className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-4 py-3">
+      <Link href="/" className="font-display text-base whitespace-nowrap text-carnival-red sm:text-xl">Kaanivaa 44</Link>
+      <nav className="flex gap-0.5 whitespace-nowrap text-[13px] font-semibold sm:gap-1 sm:text-sm">
+        <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/me">My duty</Link>
+        <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/join">Join</Link>
+        <Link className="rounded-full px-2 py-1.5 hover:bg-white/70 sm:px-3" href="/winners">Winners</Link>
+        <Link className="rounded-full bg-carnival-teal px-2 py-1.5 text-white sm:px-3 hover:bg-carnival-teal-dark" href="/admin">Admin</Link>
       </nav>
     </header>
   );

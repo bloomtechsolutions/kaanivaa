@@ -147,6 +147,7 @@ export default function Attendance() {
                       <div className="truncate font-bold">{s.full_name}</div>
                       <div className="text-xs text-carnival-ink/60">
                         {s.uid ?? "no UID"}
+                        {a.confirmed_at ? <span className="font-bold text-emerald-700"> · ✓ confirmed</span> : <span className="text-amber-600"> · not confirmed</span>}
                         {a.marked_at && ` · ${STATUS_META[a.status].label} ${new Date(a.marked_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Indian/Maldives" })}`}
                         {a.marked_by && ` by ${a.marked_by.split("@")[0]}`}
                       </div>

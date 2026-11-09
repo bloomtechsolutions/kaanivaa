@@ -10,6 +10,7 @@ export interface Staff {
   registration_status: string | null;
   available_dates: string[];
   phone: string | null;
+  source: "roster" | "admin" | "self";
 }
 
 export interface Shift {
@@ -30,6 +31,7 @@ export interface Assignment {
   marked_at: string | null;
   marked_by: string | null;
   note: string | null;
+  confirmed_at: string | null;
 }
 
 export interface Draw {
@@ -54,6 +56,8 @@ export const LOCATIONS: { name: string; target: number }[] = [
   { name: "BML Stall", target: 10 },
   { name: "Products Showcase", target: 5 },
 ];
+
+export const EVENT_DATES = ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14"];
 
 export const ATTENDED: Status[] = ["present", "late"];
 
