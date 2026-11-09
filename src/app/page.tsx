@@ -42,12 +42,28 @@ export default function Home() {
         </section>
 
         <section className="mt-8">
-          <Image src="/good-news.webp" alt="Good news! Everyone who takes part in the Kaanivaa will be entered into a lucky draw. One lucky staff member will win an iPhone 18 Pro, plus a daily lucky draw of MVR 2,000 straight to your Swipe wallet." width={832} height={409} className="mx-auto h-auto w-full max-w-3xl" />
-          <p className="mx-auto mt-2 max-w-3xl text-center text-sm text-carnival-ink/70">
-            You are entered once your attendance is marked <b>present</b> by your shift leader. Attend any shift for the grand draw; attend on a day for that day&apos;s draw.
+          <div className="relative mx-auto max-w-3xl rounded-3xl border-2 border-carnival-teal/60 bg-white/90 px-6 pb-6 pt-8 shadow-sm">
+            <h2 className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-carnival-sky px-4 font-display text-2xl text-carnival-teal-dark sm:text-3xl">
+              Good news!
+            </h2>
+            <div className="flex flex-col items-center gap-6 sm:flex-row">
+              <div className="flex-1 space-y-2 text-lg leading-relaxed text-carnival-teal-dark">
+                <p>Everyone who takes part in the Kaanivaa will be entered into a lucky draw!</p>
+                <p className="uppercase">
+                  One lucky staff member will win an <b className="font-extrabold">iPhone 18 Pro</b>
+                </p>
+                <p className="text-2xl font-bold">+</p>
+                <p>A daily lucky draw of <b>MVR 2,000</b> straight to your Swipe wallet</p>
+              </div>
+              <div className="flex shrink-0 flex-col items-center gap-2" aria-hidden>
+                <div className="flex size-28 items-center justify-center rounded-3xl bg-gradient-to-br from-[#6b1f2a] to-[#3b0d14] text-5xl shadow-lg">📱</div>
+                <div className="rounded-full bg-carnival-gold px-3 py-1 text-sm font-extrabold">+ MVR 2,000 daily</div>
+              </div>
+            </div>
+          </div>
+          <p className="mx-auto mt-3 max-w-3xl text-center text-sm text-carnival-ink/70">You are entered once your attendance is marked <b>present</b> by your shift leader. Attend any shift for the grand draw; attend on a day for that day&apos;s draw.
           </p>
-        </section>
-      </main>
+        </section>      </main>
     </>
   );
 }
