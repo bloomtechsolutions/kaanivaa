@@ -54,7 +54,11 @@ export default function MyDuty() {
 
   const shifts = rows?.filter((r) => r.shift_date) ?? [];
   const byDate = Map.groupBy(shifts, (r) => r.shift_date!);
-  const attendedDays = [...byDate].filter(([, rs]) => rs.some((r) => ATTENDED.includes(r.status!))).map(([d]) => d);
+  // every completed duty = one lucky draw entry (daily: that day's duties, grand: all duties)
+  const dailyEntries = [...byDate]
+    .map(([d, rs]) => [d, rs.filter((r) => ATTENDED.includes(r.status!)).length] as const)
+    .filter(([, n]) => n > 0);
+  const grandEntries = dailyEntries.reduce((s, [, n]) => s + n, 0);
   const unconfirmed = shifts.filter((r) => !r.confirmed_at);
 
   return (
@@ -88,12 +92,12 @@ export default function MyDuty() {
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Stat label="Shifts" value={shifts.length} />
                   <Stat label="Confirmed" value={shifts.length - unconfirmed.length} />
-                  <Stat label="Draw entries" value={attendedDays.length > 0 ? attendedDays.length + 1 : 0} />
+                  <Stat label="Draw entries" value={grandEntries} />
                 </div>
                 <p className="mt-3 text-sm text-carnival-ink/70">
-                  {attendedDays.length > 0
-                    ? `You're in the grand iPhone 18 Pro draw and the daily draw for ${attendedDays.map((d) => fmtDate(d, { day: "numeric", month: "short" })).join(", ")}.`
-                    : "Once your shift leader marks you present, you're entered into the lucky draws."}
+                  {grandEntries > 0
+                    ? `Each completed duty is one entry. You have ${grandEntries} ${grandEntries === 1 ? "entry" : "entries"} in the grand iPhone 18 Pro draw, and daily-draw entries for ${dailyEntries.map(([d, n]) => `${fmtDate(d, { day: "numeric", month: "short" })} (×${n})`).join(", ")}.`
+                    : "Each duty you complete is one lucky draw entry — once your shift leader marks you present, you're in."}
                 </p>
                 {shifts.length > 0 && (
                   unconfirmed.length > 0 ? (

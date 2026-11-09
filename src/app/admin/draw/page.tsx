@@ -14,9 +14,15 @@ interface Target {
   prize: string;
 }
 
+/** One person in a draw and how many entries (completed duties) they have. */
+interface Entry {
+  id: string;
+  n: number;
+}
+
 interface Stage {
   target: Target;
-  ids: string[];
+  entries: Entry[];
   winnerIndex: number | null;
   winner: string | null;
   spinning: boolean;
@@ -39,21 +45,27 @@ export default function DrawPage() {
     { kind: "grand", date: null, title: "Grand draw", prize: "iPhone 18 Pro" },
   ];
   const name = (id: string) => staffById.get(id)?.full_name ?? "Unknown";
-  const byName = (a: string, b: string) => name(a).localeCompare(name(b));
+  /** Collapse a raw entry list (one staff id per completed duty) into people with entry counts. */
+  const toEntries = (raw: string[]): Entry[] => {
+    const counts = new Map<string, number>();
+    for (const id of raw) counts.set(id, (counts.get(id) ?? 0) + 1);
+    return [...counts].map(([id, n]) => ({ id, n })).sort((a, b) => name(a.id).localeCompare(name(b.id)));
+  };
+  const totalOf = (e: Entry[]) => e.reduce((s, x) => s + x.n, 0);
 
-  /** Mirrors public.draw_pool() so organisers can see exactly who is in before drawing. */
-  function pool(t: Target) {
+  /** Mirrors public.draw_pool(): one entry per completed (present/late) duty. */
+  function pool(t: Target): Entry[] {
     const voidedHere = new Set(draws.filter((d) => d.voided && d.kind === t.kind && d.draw_date === t.date).map((d) => d.staff_id));
     const dailyWinners = new Set(draws.filter((d) => !d.voided && d.kind === "daily").map((d) => d.staff_id));
-    const ids = new Set<string>();
+    const raw: string[] = [];
     for (const a of assignments) {
       if (!ATTENDED.includes(a.status)) continue;
       if (t.kind === "daily" && shiftById.get(a.shift_id)!.shift_date !== t.date) continue;
       if (voidedHere.has(a.staff_id)) continue;
       if (t.kind === "daily" && excludePrev && dailyWinners.has(a.staff_id)) continue;
-      ids.add(a.staff_id);
+      raw.push(a.staff_id);
     }
-    return [...ids].sort(byName);
+    return toEntries(raw);
   }
 
   const activeFor = (t: Target) => draws.find((d) => !d.voided && d.kind === t.kind && d.draw_date === t.date);
@@ -61,7 +73,7 @@ export default function DrawPage() {
 
   function openStage(t: Target) {
     setError(null);
-    setStage({ target: t, ids: pool(t), winnerIndex: null, winner: null, spinning: false, settled: false });
+    setStage({ target: t, entries: pool(t), winnerIndex: null, winner: null, spinning: false, settled: false });
   }
 
   async function spin() {
@@ -78,9 +90,9 @@ export default function DrawPage() {
       return;
     }
     const draw = data as Draw;
-    // Use the database's entry list so the wheel shows exactly who was in the draw.
-    const ids = [...draw.pool].sort(byName);
-    setStage({ ...stage, ids, spinning: true, winnerIndex: ids.indexOf(draw.staff_id), winner: name(draw.staff_id) });
+    // Use the database's entry list so the wheel shows exactly who was in the draw, with their entries.
+    const entries = toEntries(draw.pool);
+    setStage({ ...stage, entries, spinning: true, winnerIndex: entries.findIndex((e) => e.id === draw.staff_id), winner: name(draw.staff_id) });
     reload();
   }
 
@@ -97,9 +109,10 @@ export default function DrawPage() {
       <Heading>Lucky draw</Heading>
       <Panel className="p-4 text-sm">
         <p>
-          Eligible = staff marked <b>Present</b> or <b>Late</b>. Daily draw: attended that day. Grand draw: attended any shift.
-          The winner is picked in the database with a cryptographically random choice and saved with the full entry list —
-          the wheel then spins to that name.
+          <b>Every completed duty is one entry</b> (marked <b>Present</b> or <b>Late</b>). Daily draw: duties completed that
+          day (up to 3). Grand draw: all duties completed (up to 12) — someone with 12 completed duties has 12× the chance
+          of someone with 1. The winning entry is picked in the database with a cryptographically random choice and saved
+          with the full entry list; the wheel (one slice per person, sized by their entries) then spins to that name.
         </p>
         <label className="mt-3 flex items-center gap-2 font-semibold">
           <input type="checkbox" checked={excludePrev} onChange={(e) => setExcludePrev(e.target.checked)} className="size-4 accent-carnival-red" />
@@ -112,7 +125,8 @@ export default function DrawPage() {
         {targets.map((t) => {
           const active = activeFor(t);
           const voided = draws.filter((d) => d.voided && d.kind === t.kind && d.draw_date === t.date);
-          const eligible = active ? [...active.pool].sort(byName) : pool(t);
+          const eligible = active ? toEntries(active.pool) : pool(t);
+          const entryCount = totalOf(eligible);
           const grand = t.kind === "grand";
           const k = keyOf(t);
           return (
@@ -128,7 +142,8 @@ export default function DrawPage() {
                       <div className="text-xs font-bold uppercase tracking-wide text-carnival-ink/60">Winner</div>
                       <div className="font-display text-2xl text-carnival-red">{name(active.staff_id)}</div>
                       <div className="text-xs text-carnival-ink/60">
-                        {staffById.get(active.staff_id)?.uid} · drawn from {active.pool_size} on{" "}
+                        {staffById.get(active.staff_id)?.uid} · {eligible.find((e) => e.id === active.staff_id)?.n ?? 1} of{" "}
+                        {active.pool_size} entries ({eligible.length} staff) · drawn{" "}
                         {new Date(active.drawn_at).toLocaleString("en-GB", { timeZone: "Indian/Maldives", dateStyle: "medium", timeStyle: "short" })}
                         {active.drawn_by && ` by ${active.drawn_by}`}
                       </div>
@@ -139,7 +154,10 @@ export default function DrawPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm"><b className="text-xl tabular-nums">{eligible.length}</b> eligible staff</div>
+                    <div className="text-sm">
+                      <b className="text-xl tabular-nums">{entryCount}</b> entries ·{" "}
+                      <b className="tabular-nums">{eligible.length}</b> eligible staff
+                    </div>
                     <button onClick={() => openStage(t)} disabled={eligible.length === 0}
                       className="rounded-xl bg-carnival-red px-5 py-2.5 font-bold text-white shadow hover:bg-carnival-red-dark disabled:opacity-40">
                       🎡 Open spin wheel
@@ -150,13 +168,13 @@ export default function DrawPage() {
                 {eligible.length > 0 && (
                   <div className="mt-3 border-t border-carnival-teal/10 pt-2">
                     <button onClick={() => setOpenList(openList === k ? null : k)} className="text-xs font-bold text-carnival-teal-dark hover:underline">
-                      {openList === k ? "Hide" : "Show"} {active ? "entries in this draw" : "eligible staff"} ({eligible.length})
+                      {openList === k ? "Hide" : "Show"} {active ? "entries in this draw" : "eligible staff & entries"} ({eligible.length} staff · {entryCount} entries)
                     </button>
                     {openList === k && (
                       <ul className="mt-2 flex max-h-56 flex-wrap gap-1.5 overflow-y-auto">
-                        {eligible.map((id) => (
-                          <li key={id} className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${active?.staff_id === id ? "bg-carnival-gold ring-carnival-gold" : "bg-carnival-sky ring-carnival-teal/20"}`}>
-                            {name(id)}
+                        {[...eligible].sort((a, b) => b.n - a.n || name(a.id).localeCompare(name(b.id))).map((e) => (
+                          <li key={e.id} className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${active?.staff_id === e.id ? "bg-carnival-gold ring-carnival-gold" : "bg-carnival-sky ring-carnival-teal/20"}`}>
+                            {name(e.id)} <b className="text-carnival-red">×{e.n}</b>
                           </li>
                         ))}
                       </ul>
@@ -194,7 +212,7 @@ export default function DrawPage() {
               </div>
 
               <div className="mt-4 grid items-center gap-6 lg:grid-cols-[1fr_260px]">
-                <SpinWheel names={stage.ids.map(name)} targetIndex={stage.winnerIndex} onSettled={onSettled} />
+                <SpinWheel items={stage.entries.map((e) => ({ name: name(e.id), weight: e.n }))} targetIndex={stage.winnerIndex} onSettled={onSettled} />
                 <div className="space-y-3">
                   <div className="min-h-28 rounded-2xl bg-white p-4 text-center ring-1 ring-carnival-teal/20">
                     {stage.settled && stage.winner ? (
@@ -207,7 +225,10 @@ export default function DrawPage() {
                       <div className="py-6 font-display text-xl text-carnival-teal-dark">Spinning…</div>
                     ) : (
                       <>
-                        <div className="text-sm text-carnival-ink/70"><b className="text-2xl text-carnival-ink">{stage.ids.length}</b> staff on the wheel</div>
+                        <div className="text-sm text-carnival-ink/70">
+                          <b className="text-2xl text-carnival-ink">{totalOf(stage.entries)}</b> entries from{" "}
+                          <b className="text-carnival-ink">{stage.entries.length}</b> staff
+                        </div>
                         <button onClick={spin} className="mt-3 w-full rounded-xl bg-carnival-red py-3 font-display text-xl text-white shadow-lg hover:bg-carnival-red-dark">
                           SPIN!
                         </button>
@@ -215,11 +236,14 @@ export default function DrawPage() {
                     )}
                   </div>
                   <div className="rounded-2xl bg-white/80 p-3 ring-1 ring-carnival-teal/20">
-                    <div className="mb-1 text-xs font-bold uppercase tracking-wide text-carnival-ink/60">Entries</div>
+                    <div className="mb-1 flex justify-between text-xs font-bold uppercase tracking-wide text-carnival-ink/60">
+                      <span>Staff</span><span>Entries</span>
+                    </div>
                     <ol className="max-h-64 space-y-0.5 overflow-y-auto text-sm">
-                      {stage.ids.map((id, i) => (
-                        <li key={id} className={`truncate rounded px-1.5 ${stage.settled && i === stage.winnerIndex ? "bg-carnival-gold font-extrabold" : ""}`}>
-                          {name(id)}
+                      {stage.entries.map((e, i) => (
+                        <li key={e.id} className={`flex justify-between gap-2 rounded px-1.5 ${stage.settled && i === stage.winnerIndex ? "bg-carnival-gold font-extrabold" : ""}`}>
+                          <span className="truncate">{name(e.id)}</span>
+                          <span className="tabular-nums">{e.n}</span>
                         </li>
                       ))}
                     </ol>

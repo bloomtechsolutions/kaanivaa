@@ -66,7 +66,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <p className="mx-auto mt-3 max-w-3xl text-center text-sm text-carnival-ink/70">You are entered once your attendance is marked <b>present</b> by your shift leader. Attend any shift for the grand draw; attend on a day for that day&apos;s draw.
+          <p className="mx-auto mt-3 max-w-3xl text-center text-sm text-carnival-ink/70"><b>Every duty you complete is one lucky draw entry</b> — once your shift leader marks you present. All your completed duties count for the grand draw; that day&apos;s duties count for the daily draw.
           </p>
         </section>
       </main>

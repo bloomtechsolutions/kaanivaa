@@ -41,7 +41,10 @@ export interface Draw {
   prize: string;
   staff_id: string;
   pool_size: number;
+  /** one element per entry (a staff id repeats once per completed duty) */
   pool: string[];
+  /** distinct people in the draw */
+  entrants: number | null;
   drawn_at: string;
   drawn_by: string | null;
   voided: boolean;

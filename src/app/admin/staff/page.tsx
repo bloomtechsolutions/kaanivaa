@@ -147,7 +147,11 @@ export default function StaffPage() {
                   <td className="px-2 py-2 text-right font-bold text-emerald-700 tabular-nums">{attended}</td>
                   <td className="px-2 py-2 text-right text-rose-700 tabular-nums">{absent || ""}</td>
                   <td className="px-4 py-2">
-                    {days.size ? `Grand + ${[...days].sort().map((d) => d.slice(8)).join(", ")} Nov` : <span className="text-carnival-ink/40">—</span>}
+                    {attended ? (
+                      <span title={`Daily entries: ${[...days].sort().map((d) => `${d.slice(8)} Nov ×${mine.filter((a) => ATTENDED.includes(a.status) && shiftById.get(a.shift_id)!.shift_date === d).length}`).join(", ")}`}>
+                        <b>{attended}</b> <span className="text-carnival-ink/60">({[...days].sort().map((d) => d.slice(8)).join(", ")} Nov)</span>
+                      </span>
+                    ) : <span className="text-carnival-ink/40">—</span>}
                   </td>
                 </tr>
                 {open === s.id && (

@@ -18,10 +18,14 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 
 ## Lucky draw rules (enforced in the database)
 
-- **Eligible** = marked *Present* or *Late* for at least one shift (that day for the daily draw, any day for the grand draw).
-- Winner is chosen inside Postgres (`run_draw`) using `gen_random_uuid()` (cryptographically random); the full entry list is stored with the result.
+- **Every completed duty is one entry** (assignment marked *Present* or *Late*).
+  - Daily draw: entries = duties completed that day (up to 3).
+  - Grand draw: entries = all duties completed (up to 12) — 12 duties = 12× the chance of 1 duty.
+- `run_draw` picks one **entry** uniformly at random inside Postgres with `gen_random_uuid()`
+  (cryptographically random) and stores the full entry list (`pool`, one element per entry) plus `entrants`.
 - One active draw per day and one grand draw. Voiding a win lets you redraw; the voided person is excluded from that redraw.
-- Optional: previous daily winners are excluded from later daily draws (toggle on the draw page). Everyone stays eligible for the grand draw.
+- Optional: previous daily winners are excluded from later daily draws (toggle on the draw page). Everyone stays in the grand draw.
+- The spin wheel has one slice per person, sized by their entries, and lands on the database-picked winner.
 
 ## Automatic duty assignment
 

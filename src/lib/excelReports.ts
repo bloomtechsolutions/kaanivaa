@@ -173,13 +173,10 @@ function rosterSheet(wb: Workbook, d: ReportData, name: string, title: string, d
 }
 
 function staffSheet(wb: Workbook, d: ReportData) {
-  const { shiftById } = makeIndex(d);
   const rows = [...d.staff]
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
     .map((s) => {
       const mine = d.assignments.filter((a) => a.staff_id === s.id);
-      const attendedDays = [...new Set(mine.filter((a) => ATTENDED.includes(a.status)).map((a) => shiftById.get(a.shift_id)?.shift_date))]
-        .filter(Boolean).sort() as string[];
       const wins = d.draws.filter((w) => !w.voided && w.staff_id === s.id)
         .map((w) => (w.kind === "grand" ? "iPhone 18 Pro" : `MVR 2,000 (${fmtDate(w.draw_date!, { day: "numeric", month: "short" })})`));
       const n = (st: string) => mine.filter((a) => a.status === st).length;
@@ -188,7 +185,7 @@ function staffSheet(wb: Workbook, d: ReportData) {
         { roster: "Roster", admin: "Added by admin", self: "Self-registered" }[s.source],
         s.available_dates.map((x) => fmtDate(x, { day: "numeric", month: "short" })).join(", "),
         mine.length, mine.filter((a) => a.confirmed_at).length, n("present"), n("late"), n("absent"), n("excused"), n("pending"),
-        attendedDays.length ? attendedDays.length + 1 : 0,
+        mine.filter((a) => ATTENDED.includes(a.status)).length, // grand draw entries = completed duties
         wins.join("; "),
       ];
     });
@@ -198,7 +195,7 @@ function staffSheet(wb: Workbook, d: ReportData) {
       { header: "Name", width: 30 }, { header: "UID", width: 9 }, { header: "Email", width: 26 }, { header: "Leader", width: 8 },
       { header: "Source", width: 15 }, { header: "Available", width: 22 }, { header: "Shifts", width: 8 },
       { header: "Confirmed", width: 10 }, { header: "Present", width: 9 }, { header: "Late", width: 7 }, { header: "Absent", width: 8 },
-      { header: "Excused", width: 9 }, { header: "Not marked", width: 11 }, { header: "Draw entries", width: 12 },
+      { header: "Excused", width: 9 }, { header: "Not marked", width: 11 }, { header: "Grand draw entries", width: 12 },
       { header: "Prizes won", width: 30 },
     ],
     rows,
@@ -213,12 +210,14 @@ function drawsSheets(wb: Workbook, d: ReportData) {
     wb, "Lucky draw", "Kaanivaa 44 — Lucky draw results",
     [
       { header: "Draw", width: 16 }, { header: "Prize", width: 26 }, { header: "Winner", width: 30 }, { header: "UID", width: 9 },
-      { header: "Entries", width: 9 }, { header: "Drawn at", width: 20 }, { header: "Drawn by", width: 24 },
+      { header: "Winner's entries", width: 10 }, { header: "Total entries", width: 10 }, { header: "Staff in draw", width: 10 },
+      { header: "Drawn at", width: 20 }, { header: "Drawn by", width: 24 },
       { header: "Status", width: 10 }, { header: "Void reason", width: 30 },
     ],
     ordered.map((w) => [
       w.kind === "grand" ? "Grand draw" : fmtDate(w.draw_date!, { day: "numeric", month: "short", year: "numeric" }),
-      w.prize, name(w.staff_id), staffById.get(w.staff_id)?.uid ?? "", w.pool_size, mv(w.drawn_at), w.drawn_by,
+      w.prize, name(w.staff_id), staffById.get(w.staff_id)?.uid ?? "",
+      w.pool.filter((x) => x === w.staff_id).length, w.pool_size, w.entrants ?? new Set(w.pool).size, mv(w.drawn_at), w.drawn_by,
       w.voided ? "VOIDED" : "Valid", w.void_reason,
     ]),
   );
@@ -229,13 +228,15 @@ function drawsSheets(wb: Workbook, d: ReportData) {
       const col = ws.getColumn(i + 1);
       col.width = 30;
       const label = `${w.kind === "grand" ? "Grand" : fmtDate(w.draw_date!, { day: "numeric", month: "short" })}${w.voided ? " (voided)" : ""}`;
-      const entries = [...w.pool].map(name).sort((a, b) => a.localeCompare(b));
-      col.values = [label, ...entries];
+      const counts = new Map<string, number>();
+      for (const id of w.pool) counts.set(id, (counts.get(id) ?? 0) + 1);
+      const entries = [...counts].map(([id, n]) => ({ id, n })).sort((a, b) => name(a.id).localeCompare(name(b.id)));
+      col.values = [label, ...entries.map((e) => `${name(e.id)} ×${e.n}`)];
       const h = ws.getCell(1, i + 1);
       h.font = { bold: true, color: { argb: "FFFFFFFF" } };
       h.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED } };
       entries.forEach((e, r) => {
-        if (e === name(w.staff_id)) ws.getCell(r + 2, i + 1).font = { bold: true, color: { argb: RED } };
+        if (e.id === w.staff_id) ws.getCell(r + 2, i + 1).font = { bold: true, color: { argb: RED } };
       });
     });
   }
