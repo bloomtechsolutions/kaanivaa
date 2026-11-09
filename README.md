@@ -5,12 +5,12 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | Page | Who | What |
 |---|---|---|
 | `/` | everyone | Event landing page |
-| `/me` | staff (no login) | Look up own shifts by UID or BML email and **confirm** each duty (or all at once) |
+| `/me` | staff (no login) | Look up own shifts, attendance and lucky draw entries by UID or BML email |
 | `/join` | staff (no login) | Volunteer to join (UID + `@bml.com.mv` email + days); duties are **assigned automatically** |
 | `/winners` | everyone | Daily MVR 2,000 winners + grand iPhone 18 Pro winner |
 | `/admin` | leaders, admins | Live coverage & attendance per day/shift |
 | `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; **add staff to an extra shift** (tagged EXTRA, removable); live sync between devices |
-| `/admin/staff` | leaders, admins | Per-staff shifts, confirmations, attendance, draw entries; CSV export. Admins: add staff, auto-assign, remove |
+| `/admin/staff` | leaders, admins | Per-staff shifts, attendance, draw entries; CSV export. Admins: add staff, auto-assign, remove |
 | `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
 | `/admin/reports` | admins | Excel reports (full event, daily, staff, lucky draw, follow-up) |
 | `/admin/users` | admins | Grant leader/admin console access |
@@ -43,7 +43,7 @@ Re-running Auto-assign only fills shifts the person isn't on yet.
 ## Excel reports (admins)
 
 `/admin/reports` builds formatted `.xlsx` files in the browser from live data: full event report (summary &
-coverage, master roster, a sheet per day, staff summary, lucky draw + entry lists, follow-up list), daily report,
+coverage, master roster, a sheet per day, staff summary, lucky draw + entry lists, absences follow-up), daily report,
 staff summary, lucky draw report and follow-up list.
 
 ## Security model

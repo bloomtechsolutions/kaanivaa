@@ -15,7 +15,6 @@ interface Row {
   location: string | null;
   responsibility: string | null;
   status: Status | null;
-  confirmed_at: string | null;
 }
 
 export default function MyDuty() {
@@ -23,7 +22,6 @@ export default function MyDuty() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState<string | null>(null);
 
   const lookup = useCallback(async (query: string) => {
     setBusy(true);
@@ -44,14 +42,6 @@ export default function MyDuty() {
     }
   }, [lookup]);
 
-  async function confirm(ids: string[] | null) {
-    setConfirming(ids ? ids[0] : "all");
-    const { error } = await supabase().rpc("confirm_my_duty", { q, p_assignment_ids: ids });
-    setConfirming(null);
-    if (error) return setError(error.message);
-    await lookup(q);
-  }
-
   const shifts = rows?.filter((r) => r.shift_date) ?? [];
   const byDate = Map.groupBy(shifts, (r) => r.shift_date!);
   // every completed duty = one lucky draw entry (daily: that day's duties, grand: all duties)
@@ -59,7 +49,7 @@ export default function MyDuty() {
     .map(([d, rs]) => [d, rs.filter((r) => ATTENDED.includes(r.status!)).length] as const)
     .filter(([, n]) => n > 0);
   const grandEntries = dailyEntries.reduce((s, [, n]) => s + n, 0);
-  const unconfirmed = shifts.filter((r) => !r.confirmed_at);
+  const attended = shifts.filter((r) => ATTENDED.includes(r.status!)).length;
 
   return (
     <>
@@ -91,7 +81,7 @@ export default function MyDuty() {
                 <div className="font-display text-2xl text-carnival-teal-dark">{rows[0].full_name}</div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Stat label="Shifts" value={shifts.length} />
-                  <Stat label="Confirmed" value={shifts.length - unconfirmed.length} />
+                  <Stat label="Attended" value={attended} />
                   <Stat label="Draw entries" value={grandEntries} />
                 </div>
                 <p className="mt-3 text-sm text-carnival-ink/70">
@@ -99,18 +89,6 @@ export default function MyDuty() {
                     ? `Each completed duty is one entry. You have ${grandEntries} ${grandEntries === 1 ? "entry" : "entries"} in the grand iPhone 18 Pro draw, and daily-draw entries for ${dailyEntries.map(([d, n]) => `${fmtDate(d, { day: "numeric", month: "short" })} (×${n})`).join(", ")}.`
                     : "Each duty you complete is one lucky draw entry — once your shift leader marks you present, you're in."}
                 </p>
-                {shifts.length > 0 && (
-                  unconfirmed.length > 0 ? (
-                    <button onClick={() => confirm(null)} disabled={confirming !== null}
-                      className="mt-4 w-full rounded-xl bg-carnival-red py-3 font-bold text-white shadow hover:bg-carnival-red-dark disabled:opacity-50">
-                      {confirming === "all" ? "Confirming…" : `✓ I confirm all ${unconfirmed.length} duties`}
-                    </button>
-                  ) : (
-                    <div className="mt-4 rounded-xl bg-emerald-50 py-3 text-center font-bold text-emerald-800 ring-1 ring-emerald-200">
-                      ✓ All your duties are confirmed — thank you!
-                    </div>
-                  )
-                )}
               </Panel>
 
               {[...byDate].map(([date, list]) => (
@@ -127,21 +105,11 @@ export default function MyDuty() {
                             {r.location} · {r.responsibility}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {r.status !== "pending" && (
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${STATUS_META[r.status!].chip}`}>
-                              {STATUS_META[r.status!].label}
-                            </span>
-                          )}
-                          {r.confirmed_at ? (
-                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">✓ Confirmed</span>
-                          ) : (
-                            <button onClick={() => confirm([r.assignment_id!])} disabled={confirming !== null}
-                              className="rounded-full bg-carnival-gold px-3 py-1 text-xs font-extrabold hover:brightness-95 disabled:opacity-50">
-                              {confirming === r.assignment_id ? "…" : "Confirm"}
-                            </button>
-                          )}
-                        </div>
+                        {r.status !== "pending" && (
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${STATUS_META[r.status!].chip}`}>
+                            {STATUS_META[r.status!].label}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

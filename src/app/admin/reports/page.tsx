@@ -13,9 +13,9 @@ const REPORTS: { kind: Exclude<ReportKind, "daily">; title: string; desc: string
     icon: "📊",
     desc: "Everything in one workbook: summary & location coverage, master roster, a sheet per day, staff summary, lucky draw results with full entry lists, and the follow-up list.",
   },
-  { kind: "staff", title: "Staff summary", icon: "👥", desc: "One row per staff member: availability, shifts, confirmations, attendance totals, draw entries and prizes." },
+  { kind: "staff", title: "Staff summary", icon: "👥", desc: "One row per staff member: availability, shifts, attendance totals, draw entries and prizes." },
   { kind: "draws", title: "Lucky draw report", icon: "🏆", desc: "All draws (including voided) with winner, entry count, who drew it and when, plus every entry list for audit." },
-  { kind: "followup", title: "Follow-up list", icon: "📞", desc: "Staff with duties they haven't confirmed, or who were marked absent — with emails, ready to contact." },
+  { kind: "followup", title: "Follow-up list", icon: "📞", desc: "Everyone marked absent on a duty — with emails and who marked them, ready to contact." },
 ];
 
 export default function Reports() {
@@ -58,7 +58,7 @@ export default function Reports() {
             <span className="text-3xl" aria-hidden>📅</span>
             <div className="flex-1">
               <h2 className="text-lg font-extrabold">Daily report</h2>
-              <p className="text-sm text-carnival-ink/70">One day: shift summary with location coverage, and the roster with confirmations and attendance.</p>
+              <p className="text-sm text-carnival-ink/70">One day: shift summary with location coverage, and the roster with attendance.</p>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">

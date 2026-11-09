@@ -92,7 +92,6 @@ function summarySheet(wb: Workbook, d: ReportData, date?: string) {
       `Shift ${s.shift_no}`,
       `${fmtTime(s.starts_at)}–${fmtTime(s.ends_at)}`,
       list.length,
-      list.filter((a) => a.confirmed_at).length,
       n("present"),
       n("late"),
       n("absent"),
@@ -107,20 +106,20 @@ function summarySheet(wb: Workbook, d: ReportData, date?: string) {
     date ? `Kaanivaa 44 — ${fmtDate(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}` : "Kaanivaa 44 — Event summary",
     [
       { header: "Date", width: 18 }, { header: "Shift", width: 9 }, { header: "Timing", width: 13 },
-      { header: "Assigned", width: 10 }, { header: "Confirmed", width: 11 }, { header: "Present", width: 9 },
+      { header: "Assigned", width: 10 }, { header: "Present", width: 9 },
       { header: "Late", width: 7 }, { header: "Absent", width: 8 }, { header: "Excused", width: 9 },
       { header: "Not marked", width: 11 }, { header: "Turnout", width: 9 },
     ],
     rows,
   );
-  ws.getColumn(11).numFmt = "0%";
+  ws.getColumn(10).numFmt = "0%";
   // totals row
   const total = ws.addRow([
     "TOTAL", "", "",
-    ...[4, 5, 6, 7, 8, 9, 10].map((c) => rows.reduce((sum, r) => sum + Number(r[c - 1]), 0)),
+    ...[4, 5, 6, 7, 8, 9].map((c) => rows.reduce((sum, r) => sum + Number(r[c - 1]), 0)),
   ]);
   const assigned = Number(total.getCell(4).value) || 0;
-  total.getCell(11).value = assigned ? (Number(total.getCell(6).value) + Number(total.getCell(7).value)) / assigned : 0;
+  total.getCell(10).value = assigned ? (Number(total.getCell(5).value) + Number(total.getCell(6).value)) / assigned : 0;
   total.font = { bold: true };
   total.eachCell((c) => (c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CREAM } }));
 
@@ -153,8 +152,6 @@ function rosterSheet(wb: Workbook, d: ReportData, name: string, title: string, d
       st.full_name,
       st.uid,
       st.email,
-      a.confirmed_at ? "Yes" : "No",
-      mv(a.confirmed_at),
       statusLabel(a.status),
       mv(a.marked_at),
       a.marked_by,
@@ -164,11 +161,11 @@ function rosterSheet(wb: Workbook, d: ReportData, name: string, title: string, d
     [
       { header: "Date", width: 13 }, { header: "Shift", width: 8 }, { header: "Timing", width: 12 },
       { header: "Location", width: 17 }, { header: "Role", width: 13 }, { header: "Staff name", width: 30 },
-      { header: "UID", width: 9 }, { header: "Email", width: 26 }, { header: "Confirmed", width: 10 },
-      { header: "Confirmed at", width: 19 }, { header: "Attendance", width: 11 }, { header: "Marked at", width: 19 },
+      { header: "UID", width: 9 }, { header: "Email", width: 26 },
+      { header: "Attendance", width: 11 }, { header: "Marked at", width: 19 },
       { header: "Marked by", width: 24 },
     ],
-    rows, 10,
+    rows, 8,
   );
 }
 
@@ -184,7 +181,7 @@ function staffSheet(wb: Workbook, d: ReportData) {
         s.full_name, s.uid, s.email, s.is_leader ? "Yes" : "",
         { roster: "Roster", admin: "Added by admin", self: "Self-registered" }[s.source],
         s.available_dates.map((x) => fmtDate(x, { day: "numeric", month: "short" })).join(", "),
-        mine.length, mine.filter((a) => a.confirmed_at).length, n("present"), n("late"), n("absent"), n("excused"), n("pending"),
+        mine.length, n("present"), n("late"), n("absent"), n("excused"), n("pending"),
         mine.filter((a) => ATTENDED.includes(a.status)).length, // grand draw entries = completed duties
         wins.join("; "),
       ];
@@ -194,7 +191,7 @@ function staffSheet(wb: Workbook, d: ReportData) {
     [
       { header: "Name", width: 30 }, { header: "UID", width: 9 }, { header: "Email", width: 26 }, { header: "Leader", width: 8 },
       { header: "Source", width: 15 }, { header: "Available", width: 22 }, { header: "Shifts", width: 8 },
-      { header: "Confirmed", width: 10 }, { header: "Present", width: 9 }, { header: "Late", width: 7 }, { header: "Absent", width: 8 },
+      { header: "Present", width: 9 }, { header: "Late", width: 7 }, { header: "Absent", width: 8 },
       { header: "Excused", width: 9 }, { header: "Not marked", width: 11 }, { header: "Grand draw entries", width: 12 },
       { header: "Prizes won", width: 30 },
     ],
@@ -245,20 +242,20 @@ function drawsSheets(wb: Workbook, d: ReportData) {
 function followupSheet(wb: Workbook, d: ReportData) {
   const { sorted } = makeIndex(d);
   const rows = sorted
-    .filter(({ a }) => !a.confirmed_at || a.status === "absent")
+    .filter(({ a }) => a.status === "absent")
     .map(({ a, sh, st }) => [
       st.full_name, st.uid, st.email,
       fmtDate(sh.shift_date, { day: "numeric", month: "short" }), `Shift ${sh.shift_no}`, `${fmtTime(sh.starts_at)}–${fmtTime(sh.ends_at)}`,
-      a.location, a.confirmed_at ? "Yes" : "No", statusLabel(a.status),
+      a.location, statusLabel(a.status), a.marked_by,
     ]);
   table(
-    wb, "Follow-up", "Kaanivaa 44 — Staff to follow up (unconfirmed duties or absences)",
+    wb, "Follow-up", "Kaanivaa 44 — Absences to follow up",
     [
       { header: "Name", width: 30 }, { header: "UID", width: 9 }, { header: "Email", width: 26 }, { header: "Date", width: 9 },
       { header: "Shift", width: 8 }, { header: "Timing", width: 12 }, { header: "Location", width: 17 },
-      { header: "Confirmed", width: 10 }, { header: "Attendance", width: 11 },
+      { header: "Attendance", width: 11 }, { header: "Marked by", width: 24 },
     ],
-    rows, 8,
+    rows, 7,
   );
 }
 

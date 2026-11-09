@@ -7,7 +7,6 @@ import { supabase } from "@/lib/supabase/client";
 
 interface Result {
   attendance: number;
-  confirmations: number;
   draws: number;
   staff_removed: number;
   staff: number;
@@ -17,7 +16,6 @@ interface Result {
 export default function ResetPage() {
   const { role, assignments, draws, staff, reload } = useAdmin();
   const [attendance, setAttendance] = useState(true);
-  const [confirmations, setConfirmations] = useState(true);
   const [drawsOpt, setDrawsOpt] = useState(true);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState<"activity" | "full" | null>(null);
@@ -27,7 +25,6 @@ export default function ResetPage() {
   if (role !== "admin") return <ErrorBox message="Only admins can reset data." />;
 
   const marked = assignments.filter((a) => a.status !== "pending").length;
-  const confirmed = assignments.filter((a) => a.confirmed_at).length;
   const newStaff = staff.filter((s) => s.source !== "roster").length;
 
   async function run(mode: "activity" | "full") {
@@ -39,7 +36,7 @@ export default function ResetPage() {
     const { data, error } = await supabase().rpc("admin_reset", {
       p_mode: mode,
       p_attendance: attendance,
-      p_confirmations: confirmations,
+      p_confirmations: false,
       p_draws: drawsOpt,
     });
     setBusy(null);
@@ -48,8 +45,8 @@ export default function ResetPage() {
     setTyped("");
     setDone(
       mode === "full"
-        ? `Back to the original roster: ${r.staff} staff, ${r.assignments} duties. Removed ${r.staff_removed} added staff and ${r.draws} draw(s); all attendance and confirmations cleared.`
-        : `Cleared ${r.attendance} attendance mark(s), ${r.confirmations} confirmation(s) and ${r.draws} draw(s).`,
+        ? `Back to the original roster: ${r.staff} staff, ${r.assignments} duties. Removed ${r.staff_removed} added staff and ${r.draws} draw(s); all attendance cleared.`
+        : `Cleared ${r.attendance} attendance mark(s) and ${r.draws} draw(s).`,
     );
     await reload();
   }
@@ -63,9 +60,8 @@ export default function ResetPage() {
         ⚠️ Use this only for testing before the event. Resets are permanent and affect every device straight away.
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3">
         <Count label="Attendance marked" value={marked} />
-        <Count label="Duties confirmed" value={confirmed} />
         <Count label="Draws" value={draws.length} />
         <Count label="Added / joined staff" value={newStaff} />
       </div>
@@ -78,10 +74,9 @@ export default function ResetPage() {
         <p className="text-sm text-carnival-ink/70">Keeps all staff and their duties. Clears only what you tick.</p>
         <div className="mt-3 space-y-2 text-sm font-semibold">
           <label className="flex items-center gap-2"><input type="checkbox" className={check} checked={attendance} onChange={(e) => setAttendance(e.target.checked)} />Attendance marks (back to “Not marked”)</label>
-          <label className="flex items-center gap-2"><input type="checkbox" className={check} checked={confirmations} onChange={(e) => setConfirmations(e.target.checked)} />Staff duty confirmations</label>
           <label className="flex items-center gap-2"><input type="checkbox" className={check} checked={drawsOpt} onChange={(e) => setDrawsOpt(e.target.checked)} />Lucky draw results (including voided)</label>
         </div>
-        <button onClick={() => run("activity")} disabled={busy !== null || !(attendance || confirmations || drawsOpt)}
+        <button onClick={() => run("activity")} disabled={busy !== null || !(attendance || drawsOpt)}
           className="mt-4 rounded-xl bg-carnival-teal px-5 py-2.5 font-bold text-white hover:bg-carnival-teal-dark disabled:opacity-50">
           {busy === "activity" ? "Clearing…" : "Clear selected"}
         </button>
@@ -91,7 +86,7 @@ export default function ResetPage() {
         <h2 className="text-lg font-extrabold text-rose-700">2. Full reset to the original roster</h2>
         <p className="text-sm text-carnival-ink/70">
           Restores the spreadsheet roster exactly (83 staff, 576 duties): removes every added or joined staff member,
-          restores anyone removed or edited, and clears all attendance, confirmations and draws. Console users are kept.
+          restores anyone removed or edited, and clears all attendance and draws. Console users are kept.
         </p>
         <label className="mt-3 block text-sm font-semibold">
           Type <b>RESET</b> to confirm

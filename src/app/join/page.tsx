@@ -49,12 +49,12 @@ export default function Join() {
               <div className="text-4xl" aria-hidden>🎪</div>
               <h1 className="mt-2 font-display text-2xl text-carnival-red">You&apos;re in, {name.split(" ")[0]}!</h1>
               <p className="mt-2">
-                We&apos;ve assigned you <b>{done}</b> shift{done === 1 ? "" : "s"}. Please open your duties and
-                <b> confirm</b> them so your shift leader knows you&apos;ve seen them.
+                We&apos;ve assigned you <b>{done}</b> shift{done === 1 ? "" : "s"}. Open your duties to see your dates,
+                times and locations.
               </p>
               <Link href={`/me?q=${encodeURIComponent(uid)}`}
                 className="mt-5 inline-block rounded-xl bg-carnival-red px-6 py-3 font-bold text-white hover:bg-carnival-red-dark">
-                See &amp; confirm my duties →
+                See my duties →
               </Link>
             </div>
           </Marquee>
