@@ -25,6 +25,7 @@ const NAV = [
   { href: "/admin/attendance", label: "Attendance" },
   { href: "/admin/staff", label: "Staff" },
   { href: "/admin/draw", label: "Lucky draw", adminOnly: true },
+  { href: "/admin/reports", label: "Reports", adminOnly: true },
   { href: "/admin/users", label: "Users", adminOnly: true },
   { href: "/admin/reset", label: "Reset", adminOnly: true },
 ];

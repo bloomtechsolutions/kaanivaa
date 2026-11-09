@@ -12,7 +12,9 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; live sync between devices |
 | `/admin/staff` | leaders, admins | Per-staff shifts, confirmations, attendance, draw entries; CSV export. Admins: add staff, auto-assign, remove |
 | `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
+| `/admin/reports` | admins | Excel reports (full event, daily, staff, lucky draw, follow-up) |
 | `/admin/users` | admins | Grant leader/admin console access |
+| `/admin/reset` | admins | Clear test activity or restore the original roster |
 
 ## Lucky draw rules (enforced in the database)
 
@@ -23,10 +25,21 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 
 ## Automatic duty assignment
 
-`assign_staff()` (used by Join, Add staff and Auto-assign) fills, for each available day, the location with the lowest
-fill ratio against its planned headcount (Leadership 3, Swipe 1/2 15, BML Stall 10, Products 5), breaking ties by the
-least-crowded shift. Everyone gets at least one shift per available day, and up to 3 that day while a location is still
-understaffed. TENT is given until a location's tent quota is met, otherwise AREA.
+`assign_staff()` (used by Join, Add staff and Auto-assign):
+
+- **Available on all event days → assigned to every shift** (all 12), each at the location with the lowest fill ratio.
+- **Some days only →** at least one shift per available day, and up to 3 that day while a location is still
+  understaffed.
+
+Locations are chosen by lowest fill ratio against the planned headcount (Leadership 3, Swipe 1/2 15, BML Stall 10,
+Products 5), then the least-crowded shift. TENT is given until a location's tent quota is met, otherwise AREA.
+Re-running Auto-assign only fills shifts the person isn't on yet.
+
+## Excel reports (admins)
+
+`/admin/reports` builds formatted `.xlsx` files in the browser from live data: full event report (summary &
+coverage, master roster, a sheet per day, staff summary, lucky draw + entry lists, follow-up list), daily report,
+staff summary, lucky draw report and follow-up list.
 
 ## Security model
 
