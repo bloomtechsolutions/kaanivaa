@@ -5,12 +5,13 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | Page | Who | What |
 |---|---|---|
 | `/` | everyone | Event landing page |
-| `/me` | staff (no login) | Look up own shifts, locations, attendance and draw entries by UID or BML email |
+| `/me` | staff (no login) | Look up own shifts by UID or BML email and **confirm** each duty (or all at once) |
+| `/join` | staff (no login) | Volunteer to join (UID + `@bml.com.mv` email + days); duties are **assigned automatically** |
 | `/winners` | everyone | Daily MVR 2,000 winners + grand iPhone 18 Pro winner |
 | `/admin` | leaders, admins | Live coverage & attendance per day/shift |
 | `/admin/attendance` | leaders, admins | Mark Present / Late / Absent / Excused per shift, grouped by location; bulk "mark unmarked present"; live sync between devices |
-| `/admin/staff` | leaders, admins | Per-staff shifts, attendance, draw entries; CSV export |
-| `/admin/draw` | admins | Run daily & grand draws with a reveal animation; void & redraw |
+| `/admin/staff` | leaders, admins | Per-staff shifts, confirmations, attendance, draw entries; CSV export. Admins: add staff, auto-assign, remove |
+| `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
 | `/admin/users` | admins | Grant leader/admin console access |
 
 ## Lucky draw rules (enforced in the database)
@@ -19,6 +20,13 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 - Winner is chosen inside Postgres (`run_draw`) using `gen_random_uuid()` (cryptographically random); the full entry list is stored with the result.
 - One active draw per day and one grand draw. Voiding a win lets you redraw; the voided person is excluded from that redraw.
 - Optional: previous daily winners are excluded from later daily draws (toggle on the draw page). Everyone stays eligible for the grand draw.
+
+## Automatic duty assignment
+
+`assign_staff()` (used by Join, Add staff and Auto-assign) fills, for each available day, the location with the lowest
+fill ratio against its planned headcount (Leadership 3, Swipe 1/2 15, BML Stall 10, Products 5), breaking ties by the
+least-crowded shift. Everyone gets at least one shift per available day, and up to 3 that day while a location is still
+understaffed. TENT is given until a location's tent quota is met, otherwise AREA.
 
 ## Security model
 
@@ -50,4 +58,5 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 
 ## Deploy to Vercel
 
-Import this GitHub repo in Vercel (framework: Next.js), add the two env vars above, deploy.
+The Vercel project `kaanivaa` is connected to this GitHub repo: every push to the production branch deploys to
+https://kaanivaa.vercel.app automatically. Other branches get (Vercel-protected) preview deployments.
