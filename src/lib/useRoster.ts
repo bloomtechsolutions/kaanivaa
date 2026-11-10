@@ -74,7 +74,11 @@ export function useRoster(): RosterData {
         db.from("draws").select("*").order("drawn_at").then(({ data }) => data && setDraws(data as Draw[]));
       })
       .subscribe();
+    // catch up on anything missed while the tab was in the background
+    const onVisible = () => document.visibilityState === "visible" && reload();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
       db.removeChannel(channel);
     };
   }, [reload]);

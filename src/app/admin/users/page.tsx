@@ -21,7 +21,7 @@ interface AppUser {
 }
 
 export default function Users() {
-  const { role, email: me, shifts, staff, assignments } = useAdmin();
+  const { role, email: me, shifts, staff, assignments, reload } = useAdmin();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [email, setEmail] = useState("");
   const [newRole, setNewRole] = useState<"leader" | "admin">("leader");
@@ -51,12 +51,14 @@ export default function Users() {
     setPairs((list) => [...list, p]);
     const { error } = await supabase().from("area_leaders").insert(p);
     if (error) { setError(error.message); load(); }
+    reload(); // the leader may have been added to that shift's roster
   }
   async function removePair(p: Pair) {
     setPairs((list) => list.filter((x) => !(x.shift_id === p.shift_id && x.location === p.location && x.email === p.email)));
     const { error } = await supabase().from("area_leaders").delete()
       .eq("shift_id", p.shift_id).eq("location", p.location).eq("email", p.email);
     if (error) { setError(error.message); load(); }
+    reload();
   }
 
   if (role !== "admin") return <ErrorBox message="Only admins can manage users." />;
