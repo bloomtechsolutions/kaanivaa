@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
 import { ErrorBox, Heading, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
-import { LOCATIONS, RESP_META, STATUS_META, fmtDate, fmtTime, todayMV, type Shift, type Staff, type Status } from "@/lib/roster";
+import { LOCATIONS, RESP_META, STATUS_META, attendanceOpen, fmtDate, fmtTime, todayMV, type Shift, type Staff, type Status } from "@/lib/roster";
 
 const ACTIONS: { status: Status; short: string; cls: string }[] = [
   { status: "present", short: "Present", cls: "bg-emerald-600 text-white" },
@@ -21,7 +21,7 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, scope } = useAdmin();
+  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, scope, role } = useAdmin();
   // leaders only see the shifts they cover, and on each shift only the areas they cover there
   const shifts = useMemo(() => (scope ? allShifts.filter((s) => scope.has(s.id)) : allShifts), [allShifts, scope]);
   const dates = useMemo(() => [...new Set(shifts.map((s) => s.shift_date))], [shifts]);
@@ -33,6 +33,15 @@ export default function Attendance() {
   const [filter, setFilter] = useState<Filter>("all");
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  // clock for the "only on the day" lock, ticking every 30s
+  const [now, setNow] = useState<number | null>(null);
+  const [unlocked, setUnlocked] = useState<number | null>(null); // admin correction unlock, per shift
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    tick();
+    const t = setInterval(tick, 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Pick ?shift=ID from the overview, otherwise today's current shift.
   useEffect(() => {
@@ -49,6 +58,8 @@ export default function Attendance() {
   }, [shifts, dates, shiftId]);
 
   const shift = shifts.find((s) => s.id === shiftId);
+  const dayOpen = !!shift && now !== null && attendanceOpen(shift.shift_date, now);
+  const canEdit = dayOpen || (role === "admin" && unlocked === shiftId);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return assignments
@@ -136,14 +147,28 @@ export default function Attendance() {
         </div>
       </Panel>
 
-      <AddExtraShift
+      {!dayOpen && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 p-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
+          <span>
+            🔒 Attendance for {fmtDate(shift.shift_date, { weekday: "long", day: "numeric", month: "long" })} can only be marked on that day.
+            {now !== null && now < Date.parse(`${shift.shift_date}T00:00:00+05:00`) ? " It opens at midnight." : " This day is closed."}
+          </span>
+          {role === "admin" && (
+            unlocked === shiftId
+              ? <button onClick={() => setUnlocked(null)} className="rounded-lg bg-white px-3 py-1 text-xs font-bold ring-1 ring-slate-300">Lock again</button>
+              : <button onClick={() => setUnlocked(shiftId)} className="rounded-lg bg-carnival-red px-3 py-1 text-xs font-bold text-white">Unlock to correct (admin)</button>
+          )}
+        </div>
+      )}
+
+      {canEdit && <AddExtraShift
         shift={shift}
         locations={visibleLocations}
         staff={staff}
         onShift={new Set(assignments.filter((a) => a.shift_id === shiftId).map((a) => a.staff_id))}
         onAdded={(msg) => { setError(null); setNotice(msg); reload(); }}
         onError={(msg) => { setNotice(null); setError(msg); }}
-      />
+      />}
 
       {error && <ErrorBox message={error} />}
       {notice && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">✓ {notice}</div>}
@@ -163,7 +188,7 @@ export default function Attendance() {
                   {present}/{assigned.length} in{assigned.length !== target && ` · plan ${target}`}
                 </span>
               </div>
-              {pendingIds.length > 0 && (
+              {canEdit && pendingIds.length > 0 && (
                 <button
                   onClick={() => confirm(`Mark ${pendingIds.length} unmarked staff at ${name} as present?`) && mark(pendingIds, "present")}
                   className="rounded-lg bg-emerald-600/10 px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-600/20">
@@ -196,14 +221,14 @@ export default function Attendance() {
                     {ACTIONS.map((act) => {
                       const on = a.status === act.status;
                       return (
-                        <button key={act.status} disabled={busyIds.has(a.id)} onClick={() => mark([a.id], on ? "pending" : act.status)}
+                        <button key={act.status} disabled={!canEdit || busyIds.has(a.id)} onClick={() => mark([a.id], on ? "pending" : act.status)}
                           aria-pressed={on}
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${on ? act.cls : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${on ? act.cls : "bg-slate-100 text-slate-600 enabled:hover:bg-slate-200"} disabled:cursor-not-allowed ${canEdit || on ? "" : "opacity-40"}`}>
                           {act.short}
                         </button>
                       );
                     })}
-                    {a.extra && (
+                    {a.extra && canEdit && (
                       <button title="Remove this extra shift" disabled={busyIds.has(a.id)}
                         onClick={async () => {
                           if (!confirm(`Remove the extra shift for ${s.full_name}?`)) return;

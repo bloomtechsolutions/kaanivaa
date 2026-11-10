@@ -95,6 +95,12 @@ export function shiftLabel(s: Pick<Shift, "shift_no" | "starts_at" | "ends_at">)
 }
 
 /** Today's date in the Maldives (UTC+5) as YYYY-MM-DD. */
+/** Attendance for a shift is open from 00:00 on its date until 02:00 the next morning (Maldives time). */
+export function attendanceOpen(shiftDate: string, now: number) {
+  const start = Date.parse(`${shiftDate}T00:00:00+05:00`);
+  return now >= start && now < start + 26 * 3600_000;
+}
+
 export function todayMV() {
   return new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10);
 }
