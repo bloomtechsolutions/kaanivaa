@@ -9,6 +9,7 @@ const CONTACTS = [
     people: [
       { name: "Niyaz Waleed", phone: "7969621" },
       { name: "Mohamed Jaish Riyaz", phone: "9454543" },
+      { name: "Hassan Maaiz", phone: "9942876" },
     ],
   },
   {
