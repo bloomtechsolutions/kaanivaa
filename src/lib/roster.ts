@@ -10,7 +10,7 @@ export interface Staff {
   registration_status: string | null;
   available_dates: string[];
   phone: string | null;
-  source: "roster" | "admin" | "self";
+  source: "roster" | "admin" | "self" | "leader";
 }
 
 export interface Shift {
@@ -61,6 +61,9 @@ export const LOCATIONS: { name: string; target: number }[] = [
   { name: "Swipe 2", target: 15 },
   { name: "BML Stall", target: 10 },
   { name: "Products Showcase", target: 5 },
+  // departments: no fixed plan; their leaders add the staff who worked each shift on the day
+  { name: "Marketing", target: 0 },
+  { name: "Merchant", target: 0 },
 ];
 
 export const EVENT_DATES = ["2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14"];

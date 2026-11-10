@@ -125,7 +125,7 @@ function summarySheet(wb: Workbook, d: ReportData, date?: string) {
 
   // location coverage under the table
   ws.addRow([]);
-  const hdr = ws.addRow(["Coverage by location", "", "", ...LOCATIONS.map((l) => `${l.name} (plan ${l.target})`)]);
+  const hdr = ws.addRow(["Coverage by location", "", "", ...LOCATIONS.map((l) => l.target ? `${l.name} (plan ${l.target})` : l.name)]);
   hdr.font = { bold: true, color: { argb: TEAL } };
   for (const s of shifts) {
     ws.addRow([
@@ -179,7 +179,7 @@ function staffSheet(wb: Workbook, d: ReportData) {
       const n = (st: string) => mine.filter((a) => a.status === st).length;
       return [
         s.full_name, s.uid, s.email, s.is_leader ? "Yes" : "",
-        { roster: "Roster", admin: "Added by admin", self: "Self-registered" }[s.source],
+        { roster: "Roster", admin: "Added by admin", self: "Self-registered", leader: "Added by leader on the day" }[s.source],
         s.available_dates.map((x) => fmtDate(x, { day: "numeric", month: "short" })).join(", "),
         mine.length, n("present"), n("late"), n("absent"), n("excused"), n("pending"),
         mine.filter((a) => ATTENDED.includes(a.status)).length, // grand draw entries = completed duties

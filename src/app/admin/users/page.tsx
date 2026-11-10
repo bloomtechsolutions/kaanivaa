@@ -236,7 +236,7 @@ function AreaLeaders({
         staff there see them as “Report to”.{" "}
         {gaps ? <b className="text-rose-700">{gaps} gap{gaps === 1 ? "" : "s"} still need a leader.</b> : <b className="text-emerald-700">Every area is covered.</b>}
       </p>
-      <table className="mt-2 w-full min-w-[820px] text-xs">
+      <table className="mt-2 w-full min-w-[1100px] text-xs">
         <thead>
           <tr className="text-left text-carnival-ink/60">
             <th className="py-1 pr-2">Shift</th>

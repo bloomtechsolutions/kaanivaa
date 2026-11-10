@@ -179,13 +179,15 @@ export default function Attendance() {
         const present = assigned.filter((a) => a.status === "present" || a.status === "late").length;
         const pendingIds = assigned.filter((a) => a.status === "pending").map((a) => a.id);
         if (list.length === 0 && (query || filter !== "all")) return null;
+        // department panels only show when someone is on them or you lead that department this shift
+        if (target === 0 && assigned.length === 0 && !myAreas?.includes(name)) return null;
         return (
           <Panel key={name} className="overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carnival-teal/10 bg-carnival-cream px-4 py-2">
               <div>
                 <span className="font-extrabold">{name}</span>
                 <span className="ml-2 text-sm text-carnival-ink/70 tabular-nums">
-                  {present}/{assigned.length} in{assigned.length !== target && ` · plan ${target}`}
+                  {present}/{assigned.length} in{target > 0 && assigned.length !== target && ` · plan ${target}`}
                 </span>
               </div>
               {canEdit && pendingIds.length > 0 && (
@@ -268,6 +270,25 @@ function AddExtraShift({
   const [location, setLocation] = useState("");
   const [present, setPresent] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const areaChoices = locations.filter((l) => l.name !== "Shift Leadership");
+  const [newName, setNewName] = useState("");
+  const [newUid, setNewUid] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newLoc, setNewLoc] = useState("");
+
+  async function addNew(e: React.FormEvent) {
+    e.preventDefault();
+    const loc = newLoc || areaChoices[0]?.name;
+    if (!loc) return onError("You have no area on this shift.");
+    setBusy("new");
+    const { error } = await supabase().rpc("add_new_staff_to_shift", {
+      p_shift: shift.id, p_location: loc, p_name: newName, p_uid: newUid || null, p_phone: newPhone || null,
+    });
+    setBusy(null);
+    if (error) return onError(error.message);
+    onAdded(`${newName.trim()} added to ${loc}, Shift ${shift.shift_no} (${fmtDate(shift.shift_date)}) and marked present.`);
+    setNewName(""); setNewUid(""); setNewPhone("");
+  }
 
   const term = q.trim().toLowerCase();
   const matches = term.length < 2 ? [] : staff
@@ -290,7 +311,7 @@ function AddExtraShift({
     return (
       <button onClick={() => setOpen(true)}
         className="w-full rounded-2xl border-2 border-dashed border-carnival-teal/40 bg-white/60 px-4 py-2.5 text-sm font-bold text-carnival-teal-dark hover:bg-white">
-        + Add staff to this shift (extra shift)
+        + Add staff to this shift
       </button>
     );
   }
@@ -300,7 +321,7 @@ function AddExtraShift({
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-extrabold">Add staff to Shift {shift.shift_no} · {fmtDate(shift.shift_date)} {fmtTime(shift.starts_at)}–{fmtTime(shift.ends_at)}</div>
-          <p className="text-xs text-carnival-ink/70">For someone taking an extra shift on top of their assigned duties. Each completed duty is a lucky draw entry.</p>
+          <p className="text-xs text-carnival-ink/70">For someone taking an extra shift, or Marketing / Merchant staff who worked this shift. Each completed duty is a lucky draw entry.</p>
         </div>
         <button onClick={() => setOpen(false)} className="text-sm font-bold text-carnival-ink/60 hover:text-carnival-ink">✕</button>
       </div>
@@ -334,6 +355,26 @@ function AddExtraShift({
           {matches.length === 0 && <li className="px-3 py-2 text-sm text-carnival-ink/60">No match (people already on this shift are hidden).</li>}
         </ul>
       )}
+      <form onSubmit={addNew} className="space-y-2 rounded-xl bg-carnival-sky/50 p-3">
+        <div className="text-sm font-extrabold">Not in the list? Add a new person</div>
+        <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
+          <input required minLength={3} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" aria-label="Full name"
+            className="min-w-0 rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
+          <input value={newUid} onChange={(e) => setNewUid(e.target.value)} placeholder="Staff UID" aria-label="Staff UID"
+            className="min-w-0 rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
+          <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Phone" aria-label="Phone" inputMode="tel"
+            className="min-w-0 rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
+          <select value={newLoc || areaChoices[0]?.name || ""} onChange={(e) => setNewLoc(e.target.value)} aria-label="Area for the new person"
+            className="min-w-0 rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-carnival-teal/30">
+            {areaChoices.map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+          </select>
+          <button disabled={busy !== null}
+            className="rounded-xl bg-carnival-red px-4 py-2 text-sm font-bold text-white hover:bg-carnival-red-dark disabled:opacity-50">
+            {busy === "new" ? "Adding…" : "Add & mark present"}
+          </button>
+        </div>
+        <p className="text-xs text-carnival-ink/60">If the UID already exists, that person is used instead of creating a duplicate.</p>
+      </form>
     </Panel>
   );
 }
