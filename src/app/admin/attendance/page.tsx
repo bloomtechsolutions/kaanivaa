@@ -21,17 +21,14 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, areas, shiftIds } = useAdmin();
-  // leaders limited to shifts only see those days/shifts
-  const shifts = useMemo(
-    () => (shiftIds.length ? allShifts.filter((s) => shiftIds.includes(s.id)) : allShifts),
-    [allShifts, shiftIds],
-  );
+  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, scope } = useAdmin();
+  // leaders only see the shifts they cover, and on each shift only the areas they cover there
+  const shifts = useMemo(() => (scope ? allShifts.filter((s) => scope.has(s.id)) : allShifts), [allShifts, scope]);
   const dates = useMemo(() => [...new Set(shifts.map((s) => s.shift_date))], [shifts]);
-  // leaders limited to areas only see (and count) those locations
-  const visibleLocations = areas.length ? LOCATIONS.filter((l) => areas.includes(l.name)) : LOCATIONS;
   const [notice, setNotice] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<number | null>(null);
+  const myAreas = scope && shiftId !== null ? scope.get(shiftId) ?? [] : null;
+  const visibleLocations = myAreas ? LOCATIONS.filter((l) => myAreas.includes(l.name)) : LOCATIONS;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +79,7 @@ export default function Attendance() {
   }
 
   if (!shift) {
-    return shiftIds.length > 0 && shifts.length === 0 ? (
+    return scope && shifts.length === 0 ? (
       <ErrorBox message="You have no shifts on the roster, so there is no attendance for you to mark. Ask an admin to check your shifts on the Users page." />
     ) : null;
   }
@@ -92,16 +89,14 @@ export default function Attendance() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <Heading>Attendance</Heading>
-          {(areas.length > 0 || shiftIds.length > 0) && (
+          {scope && (
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {areas.length > 0 && (
-                <span className="rounded-full bg-carnival-gold px-3 py-0.5 text-xs font-extrabold">Your area: {areas.join(", ")}</span>
-              )}
-              {shiftIds.length > 0 && (
-                <span className="rounded-full bg-carnival-teal px-3 py-0.5 text-xs font-extrabold text-white">
-                  Your shifts: {shifts.map((s) => `${fmtDate(s.shift_date, { day: "numeric", month: "short" })} S${s.shift_no}`).join(", ")}
-                </span>
-              )}
+              <span className="rounded-full bg-carnival-gold px-3 py-0.5 text-xs font-extrabold">
+                Your area this shift: {myAreas?.length ? myAreas.join(", ") : "—"}
+              </span>
+              <span className="rounded-full bg-carnival-teal px-3 py-0.5 text-xs font-extrabold text-white">
+                Your shifts: {shifts.map((s) => `${fmtDate(s.shift_date, { day: "numeric", month: "short" })} S${s.shift_no}`).join(", ")}
+              </span>
             </div>
           )}
         </div>

@@ -6,6 +6,8 @@ import { ErrorBox, Heading, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
 import { LOCATIONS, fmtDate, fmtTime, type Assignment, type Shift } from "@/lib/roster";
 
+interface Pair { shift_id: number; location: string; email: string }
+
 interface AppUser {
   email: string;
   role: "admin" | "leader";
@@ -24,17 +26,38 @@ export default function Users() {
   const [email, setEmail] = useState("");
   const [newRole, setNewRole] = useState<"leader" | "admin">("leader");
   const [error, setError] = useState<string | null>(null);
+  const [pairs, setPairs] = useState<Pair[]>([]);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase().from("app_users").select("*").order("role").order("email");
-    if (error) setError(error.message);
-    else setUsers(data as AppUser[]);
+    const db = supabase();
+    const [u, p] = await Promise.all([
+      db.from("app_users").select("*").order("role").order("email"),
+      db.from("area_leaders").select("shift_id, location, email"),
+    ]);
+    const err = u.error ?? p.error;
+    if (err) return setError(err.message);
+    setUsers(u.data as AppUser[]);
+    setPairs(p.data as Pair[]);
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch
     load();
   }, [load]);
+
+  const pairsOf = (e: string) => pairs.filter((p) => p.email === e).length;
+
+  async function addPair(p: Pair) {
+    setPairs((list) => [...list, p]);
+    const { error } = await supabase().from("area_leaders").insert(p);
+    if (error) { setError(error.message); load(); }
+  }
+  async function removePair(p: Pair) {
+    setPairs((list) => list.filter((x) => !(x.shift_id === p.shift_id && x.location === p.location && x.email === p.email)));
+    const { error } = await supabase().from("area_leaders").delete()
+      .eq("shift_id", p.shift_id).eq("location", p.location).eq("email", p.email);
+    if (error) { setError(error.message); load(); }
+  }
 
   if (role !== "admin") return <ErrorBox message="Only admins can manage users." />;
 
@@ -47,26 +70,6 @@ export default function Users() {
     load();
   }
 
-  async function saveShifts(u: AppUser, shift_ids: number[]) {
-    setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, shift_ids } : x)));
-    const { error } = await supabase().from("app_users").update({ shift_ids }).eq("email", u.email);
-    if (error) {
-      setError(error.message);
-      load();
-    }
-  }
-
-  function toggleShift(u: AppUser, id: number) {
-    saveShifts(u, u.shift_ids.includes(id) ? u.shift_ids.filter((x) => x !== id) : [...u.shift_ids, id].sort((a, b) => a - b));
-  }
-
-  /** Tick the shifts this leader is rostered on (matched by email to the staff list). */
-  /** live roster shifts of the staff member a login is linked to */
-  const rosterShiftsOf = (staffId: string | null) =>
-    staffId ? [...new Set(assignments.filter((a) => a.staff_id === staffId).map((a) => a.shift_id))].sort((a, b) => a - b) : [];
-  /** the shifts a leader actually gets (same rule as the database) */
-  const effectiveShifts = (u: AppUser) => (u.follow_roster && u.staff_id ? rosterShiftsOf(u.staff_id) : u.shift_ids);
-
   async function saveLink(u: AppUser, patch: { staff_id?: string | null; follow_roster?: boolean }) {
     const next = { ...patch };
     if (patch.staff_id === null) next.follow_roster = false;
@@ -78,28 +81,9 @@ export default function Users() {
     }
   }
 
-  function applyRosterShifts(u: AppUser) {
-    const person = staff.find((p) => p.id === u.staff_id) ?? staff.find((p) => p.email?.toLowerCase() === u.email.toLowerCase());
-    if (!person) return setError(`${u.email} isn't on the staff list, so their roster shifts can't be looked up — tick shifts manually.`);
-    const ids = [...new Set(assignments.filter((a) => a.staff_id === person.id).map((a) => a.shift_id))].sort((a, b) => a - b);
-    if (!ids.length) return setError(`${person.full_name} has no shifts on the roster.`);
-    setError(null);
-    saveShifts(u, ids);
-  }
-
   async function saveContact(u: AppUser, patch: { display_name?: string | null; phone?: string | null }) {
     setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, ...patch } : x)));
     const { error } = await supabase().from("app_users").update(patch).eq("email", u.email);
-    if (error) {
-      setError(error.message);
-      load();
-    }
-  }
-
-  async function toggleArea(u: AppUser, area: string) {
-    const areas = u.areas.includes(area) ? u.areas.filter((a) => a !== area) : [...u.areas, area];
-    setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, areas } : x)));
-    const { error } = await supabase().from("app_users").update({ areas }).eq("email", u.email);
     if (error) {
       setError(error.message);
       load();
@@ -114,13 +98,15 @@ export default function Users() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="space-y-4">
+      <div className="max-w-2xl space-y-4">
       <Heading>Console users</Heading>
       <Panel className="p-4 text-sm">
         <p>
-          <b>Leaders</b> mark attendance and can add staff to extra shifts. Give a leader <b>areas</b> and <b>shifts</b> and they
-          will only see and manage staff in those areas and shifts (none ticked = all). Give each area leader a <b>name</b> — staff in that area see it as “Report to” on My duty. <b>Admins</b> see everything, run lucky draws,
-          change duties and manage users.
+          <b>Leaders</b> mark attendance and can add staff to extra shifts. Use <b>Area leaders per shift</b> below to pick
+          who leads each area on each shift — a leader can have a different area on every shift, and then only sees and
+          manages that area on that shift. Staff see that leader as “Report to” on My duty. <b>Admins</b> see everything,
+          run lucky draws, change duties and manage users.
         </p>
         <p className="mt-2 text-carnival-ink/70">
           Each person also needs a login: in Supabase go to <i>Authentication → Users → Add user</i> and create the same email with a password.
@@ -151,7 +137,7 @@ export default function Users() {
                   {u.role}
                   {u.role === "leader" && (
                     <span className="ml-1 font-semibold normal-case text-carnival-ink/60">
-                      · {u.areas.length ? u.areas.join(", ") : "all areas"} · {u.follow_roster && u.staff_id ? `roster shifts (${effectiveShifts(u).length})` : u.shift_ids.length ? `${u.shift_ids.length} shift${u.shift_ids.length === 1 ? "" : "s"}` : "all shifts"}
+                      · {pairsOf(u.email) ? `${pairsOf(u.email)} shift-area${pairsOf(u.email) === 1 ? "" : "s"} below` : "no areas yet — sees everything"}
                     </span>
                   )}
                 </div>
@@ -172,11 +158,6 @@ export default function Users() {
                     ))}
                   </select>
                 </label>
-                <label className={`flex items-center gap-2 pb-1.5 text-xs font-semibold ${u.staff_id ? "" : "opacity-40"}`}>
-                  <input type="checkbox" disabled={!u.staff_id} checked={u.follow_roster && !!u.staff_id}
-                    onChange={(e) => saveLink(u, { follow_roster: e.target.checked })} className="size-4 accent-carnival-red" />
-                  Follow their roster shifts automatically
-                </label>
               </div>
             )}
             {u.role === "leader" && (
@@ -195,116 +176,100 @@ export default function Users() {
                 </label>
               </div>
             )}
-            {u.role === "leader" && (
-              <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={`Areas for ${u.email}`}>
-                {LOCATIONS.map((l) => {
-                  const on = u.areas.includes(l.name);
-                  return (
-                    <button key={l.name} onClick={() => toggleArea(u, l.name)} aria-pressed={on}
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${on ? "bg-carnival-teal text-white ring-carnival-teal" : "bg-white ring-carnival-teal/30 hover:bg-carnival-sky"}`}>
-                      {on ? "✓ " : ""}{l.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {u.role === "leader" && (
-              <div className="mt-2 rounded-xl bg-carnival-sky/50 p-2" role="group" aria-label={`Shifts for ${u.email}`}>
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-carnival-ink/70">
-                    Shifts{" "}
-                    {u.follow_roster && u.staff_id
-                      ? "(following their roster — updates when their duties change)"
-                      : u.shift_ids.length ? "" : "(none ticked = all shifts)"}
-                  </span>
-                  {!(u.follow_roster && u.staff_id) && (
-                    <span className="flex gap-2">
-                      <button onClick={() => applyRosterShifts(u)} className="text-xs font-bold text-carnival-teal-dark hover:underline">Use their roster shifts</button>
-                      {u.shift_ids.length > 0 && <button onClick={() => saveShifts(u, [])} className="text-xs font-bold text-carnival-ink/60 hover:underline">Clear</button>}
-                    </span>
-                  )}
-                </div>
-                <div className="grid gap-1.5 sm:grid-cols-2">
-                  {[...new Set(shifts.map((x) => x.shift_date))].map((d) => (
-                    <div key={d} className="flex flex-wrap items-center gap-1">
-                      <span className="w-14 text-[11px] font-bold">{fmtDate(d, { day: "numeric", month: "short" })}</span>
-                      {shifts.filter((x) => x.shift_date === d).map((x) => {
-                        const following = u.follow_roster && !!u.staff_id;
-                        const on = effectiveShifts(u).includes(x.id);
-                        return (
-                          <button key={x.id} onClick={() => toggleShift(u, x.id)} aria-pressed={on} disabled={following}
-                            title={`Shift ${x.shift_no} · ${fmtTime(x.starts_at)}–${fmtTime(x.ends_at)}`}
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${on ? "bg-carnival-red text-white ring-carnival-red" : "bg-white ring-carnival-teal/30 hover:bg-carnival-cream"} disabled:cursor-default`}>
-                            S{x.shift_no}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </Panel>
+      </div>
 
-      <LeaderCoverage
+      <AreaLeaders
         shifts={shifts}
         assignments={assignments}
+        pairs={pairs}
+        onAdd={addPair}
+        onRemove={removePair}
         leaders={users
           .filter((u) => u.role === "leader")
           .map((u) => ({
+            email: u.email,
             name: u.display_name?.trim() || staff.find((p) => p.id === u.staff_id)?.full_name || null,
-            areas: u.areas,
-            shiftIds: effectiveShifts(u),
+            staffId: u.staff_id,
           }))}
       />
     </div>
   );
 }
 
-/** Which leader staff will "Report to" for every shift × area; gaps in red. */
-function LeaderCoverage({
-  shifts, assignments, leaders,
+/** Editor: which leader(s) lead each area on each shift. Staff see them as "Report to"; gaps in red. */
+function AreaLeaders({
+  shifts, assignments, pairs, leaders, onAdd, onRemove,
 }: {
   shifts: Shift[];
   assignments: Assignment[];
-  leaders: { name: string | null; areas: string[]; shiftIds: number[] }[];
+  pairs: Pair[];
+  leaders: { email: string; name: string | null; staffId: string | null }[];
+  onAdd: (p: Pair) => void;
+  onRemove: (p: Pair) => void;
 }) {
-  const areas = LOCATIONS.filter((l) => l.name !== "Shift Leadership");
+  const label = (e: string) => leaders.find((l) => l.email === e)?.name ?? e.split("@")[0];
+  // shifts each leader is rostered on (hint when picking)
+  const onRoster = new Set(
+    assignments.flatMap((a) => leaders.filter((l) => l.staffId === a.staff_id).map((l) => `${l.email}|${a.shift_id}`)),
+  );
   let gaps = 0;
   const rows = shifts.map((sh) => ({
     sh,
-    cells: areas.map((l) => {
+    cells: LOCATIONS.map((l) => {
       const staffCount = assignments.filter((a) => a.shift_id === sh.id && a.location === l.name).length;
-      const names = leaders
-        .filter((x) => x.areas.includes(l.name) && (x.shiftIds.length === 0 || x.shiftIds.includes(sh.id)))
-        .map((x) => x.name ?? "(no name)");
-      if (staffCount > 0 && (names.length === 0 || names.every((n) => n === "(no name)"))) gaps++;
-      return { staffCount, names };
+      const here = pairs.filter((p) => p.shift_id === sh.id && p.location === l.name);
+      const gap = l.name !== "Shift Leadership" && staffCount > 0 && here.length === 0;
+      if (gap) gaps++;
+      return { loc: l.name, staffCount, here, gap };
     }),
   }));
   return (
     <Panel className="overflow-x-auto p-4">
-      <h2 className="font-extrabold">Leader coverage</h2>
+      <h2 className="font-extrabold">Area leaders per shift</h2>
       <p className="text-xs text-carnival-ink/70">
-        Who staff see as “Report to” for each shift and area.{" "}
-        {gaps ? <b className="text-rose-700">{gaps} gap{gaps === 1 ? "" : "s"} — give a leader that area and shift.</b> : <b className="text-emerald-700">Every area is covered.</b>}
+        Pick the leader for each area on each shift (★ = rostered on that shift). They only see that area on that shift, and
+        staff there see them as “Report to”.{" "}
+        {gaps ? <b className="text-rose-700">{gaps} gap{gaps === 1 ? "" : "s"} still need a leader.</b> : <b className="text-emerald-700">Every area is covered.</b>}
       </p>
-      <table className="mt-2 w-full min-w-[640px] text-xs">
+      <table className="mt-2 w-full min-w-[820px] text-xs">
         <thead>
           <tr className="text-left text-carnival-ink/60">
             <th className="py-1 pr-2">Shift</th>
-            {areas.map((l) => <th key={l.name} className="px-1 py-1">{l.name}</th>)}
+            {LOCATIONS.map((l) => <th key={l.name} className="px-1 py-1">{l.name}</th>)}
           </tr>
         </thead>
         <tbody className="divide-y divide-carnival-teal/10">
           {rows.map(({ sh, cells }) => (
-            <tr key={sh.id}>
-              <td className="whitespace-nowrap py-1 pr-2 font-bold">{fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no}</td>
-              {cells.map((c, i) => (
-                <td key={i} className={`px-1 py-1 ${c.staffCount && (!c.names.length || c.names.every((n) => n === "(no name)")) ? "bg-rose-50 font-bold text-rose-700" : ""}`}>
-                  {c.staffCount === 0 ? <span className="text-carnival-ink/30">no staff</span> : c.names.length ? c.names.join(", ") : "— no leader"}
+            <tr key={sh.id} className="align-top">
+              <td className="whitespace-nowrap py-1.5 pr-2 font-bold">
+                {fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no}
+                <div className="font-normal text-carnival-ink/50">{fmtTime(sh.starts_at)}–{fmtTime(sh.ends_at)}</div>
+              </td>
+              {cells.map((c) => (
+                <td key={c.loc} className={`px-1 py-1.5 ${c.gap ? "bg-rose-50" : ""}`}>
+                  <div className="text-[10px] text-carnival-ink/50">{c.staffCount} staff</div>
+                  <div className="flex flex-wrap gap-1">
+                    {c.here.map((p) => (
+                      <span key={p.email} className="inline-flex items-center gap-1 rounded-full bg-carnival-teal px-2 py-0.5 font-bold text-white">
+                        {label(p.email)}
+                        <button onClick={() => onRemove(p)} aria-label={`Remove ${label(p.email)} from ${c.loc}`} className="hover:text-carnival-gold">✕</button>
+                      </span>
+                    ))}
+                  </div>
+                  <select value="" onChange={(e) => e.target.value && onAdd({ shift_id: sh.id, location: c.loc, email: e.target.value })}
+                    aria-label={`Add leader to ${c.loc}, ${sh.shift_date} shift ${sh.shift_no}`}
+                    className={`mt-1 w-full rounded-md border-0 bg-white px-1 py-0.5 text-[11px] ring-1 ${c.gap ? "ring-rose-400" : "ring-carnival-teal/30"}`}>
+                    <option value="">{c.gap ? "— no leader —" : "+ add"}</option>
+                    {leaders
+                      .filter((l) => !c.here.some((p) => p.email === l.email))
+                      .sort((a, b) => Number(onRoster.has(`${b.email}|${sh.id}`)) - Number(onRoster.has(`${a.email}|${sh.id}`)) || label(a.email).localeCompare(label(b.email)))
+                      .map((l) => (
+                        <option key={l.email} value={l.email}>{onRoster.has(`${l.email}|${sh.id}`) ? "★ " : ""}{label(l.email)}</option>
+                      ))}
+                  </select>
                 </td>
               ))}
             </tr>

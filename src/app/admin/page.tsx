@@ -12,11 +12,10 @@ function tally(list: Assignment[]) {
 }
 
 export default function Overview() {
-  const { shifts: allShifts, assignments: allAssignments, staff, draws, areas, shiftIds } = useAdmin();
-  // leaders limited to shifts/areas see only their part of the event
-  const shifts = shiftIds.length ? allShifts.filter((s) => shiftIds.includes(s.id)) : allShifts;
-  const shiftSet = new Set(shifts.map((s) => s.id));
-  const assignments = allAssignments.filter((a) => shiftSet.has(a.shift_id) && (!areas.length || areas.includes(a.location)));
+  const { shifts: allShifts, assignments: allAssignments, staff, draws, scope } = useAdmin();
+  // leaders see only the shifts and, per shift, the areas they cover
+  const shifts = scope ? allShifts.filter((s) => scope.has(s.id)) : allShifts;
+  const assignments = scope ? allAssignments.filter((a) => scope.get(a.shift_id)?.includes(a.location)) : allAssignments;
   const dates = [...new Set(shifts.map((s) => s.shift_date))];
   const today = todayMV();
   const all = tally(assignments);

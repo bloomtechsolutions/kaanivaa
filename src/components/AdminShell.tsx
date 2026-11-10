@@ -14,6 +14,8 @@ interface AdminCtx extends RosterData {
   areas: string[];
   /** shifts this leader is limited to; empty = all (always empty for admins) */
   shiftIds: number[];
+  /** what a leader may see: shift id -> locations; null = everything (admins, unrestricted leaders) */
+  scope: Map<number, string[]> | null;
 }
 
 const Ctx = createContext<AdminCtx | null>(null);
@@ -35,7 +37,7 @@ const NAV = [
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
-  const { role, email, areas, shiftIds } = useRole();
+  const { role, email, areas, shiftIds, pairs } = useRole();
   const roster = useRoster();
   const pathname = usePathname();
 
@@ -54,7 +56,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </div>
     );
   else if (roster.error) body = <ErrorBox message={roster.error} />;
-  else body = <Ctx.Provider value={{ ...roster, role, email, areas: role === "admin" ? [] : areas, shiftIds: role === "admin" ? [] : shiftIds }}>{children}</Ctx.Provider>;
+  else body = <Ctx.Provider value={{ ...roster, role, email, areas: role === "admin" ? [] : areas, shiftIds: role === "admin" ? [] : shiftIds, scope: buildScope(role, pairs, areas, shiftIds, roster.shifts.map((s) => s.id)) }}>{children}</Ctx.Provider>;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -87,4 +89,26 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{body}</main>
     </div>
   );
+}
+
+/**
+ * A leader's scope: per-shift area assignments when they have any, otherwise their areas x shifts.
+ * null = no restriction.
+ */
+function buildScope(
+  role: "admin" | "leader",
+  pairs: { shift_id: number; location: string }[],
+  areas: string[],
+  shiftIds: number[],
+  allShiftIds: number[],
+): Map<number, string[]> | null {
+  if (role === "admin") return null;
+  if (pairs.length) {
+    const m = new Map<number, string[]>();
+    for (const p of pairs) m.set(p.shift_id, [...(m.get(p.shift_id) ?? []), p.location]);
+    return m;
+  }
+  if (!areas.length && !shiftIds.length) return null;
+  const all = ["Shift Leadership", "Swipe 1", "Swipe 2", "BML Stall", "Products Showcase"];
+  return new Map((shiftIds.length ? shiftIds : allShiftIds).map((id) => [id, areas.length ? areas : all]));
 }

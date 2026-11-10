@@ -13,7 +13,7 @@ Next.js 16 app (Vercel) + Supabase for running the Kaanivaa 44 staff duty roster
 | `/admin/staff` | leaders, admins | Per-staff shifts, attendance, draw entries; CSV export. Admins: add staff, **edit staff details**, auto-assign, **add / move / remove a duty, remove all duties**, remove staff |
 | `/admin/draw` | admins | See eligible staff per draw; spin-wheel reveal of the database-picked winner; void & redraw |
 | `/admin/reports` | admins | Excel reports (full event, daily, staff, lucky draw, follow-up) |
-| `/admin/users` | admins | Grant leader/admin console access; **assign leaders to areas and shifts** (they then only see and manage those locations/shifts; "use their roster shifts" fills shifts from the roster) |
+| `/admin/users` | admins | Grant leader/admin console access; link leader logins to staff records, and **pick the area leader(s) for every shift × area** (a leader can lead a different area on each shift; they then only see and manage that area on that shift, and staff there see them as "Report to") |
 | `/admin/reset` | admins | Clear test activity or restore the original roster |
 
 ## Lucky draw rules (enforced in the database)

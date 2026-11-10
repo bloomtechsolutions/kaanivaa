@@ -105,6 +105,8 @@ export function useRole() {
   const [email, setEmail] = useState<string | null>(null);
   const [areas, setAreas] = useState<string[]>([]);
   const [shiftIds, setShiftIds] = useState<number[]>([]);
+  // per-shift area assignments for this leader (shift x location); empty = use areas/shiftIds
+  const [pairs, setPairs] = useState<{ shift_id: number; location: string }[]>([]);
   useEffect(() => {
     const db = supabase();
     db.auth.getUser().then(async ({ data }) => {
@@ -116,8 +118,10 @@ export function useRole() {
       // effective shifts: live roster duties when the login follows the roster, else the ticked shifts
       const { data: eff } = await db.rpc("my_shift_ids");
       setShiftIds((eff as number[] | null) ?? (row?.shift_ids as number[] | undefined) ?? []);
+      const { data: mine } = await db.from("area_leaders").select("shift_id, location").eq("email", e);
+      setPairs((mine as { shift_id: number; location: string }[] | null) ?? []);
       setRole((row?.role as "admin" | "leader" | undefined) ?? null);
     });
   }, []);
-  return { role, email, areas, shiftIds };
+  return { role, email, areas, shiftIds, pairs };
 }
