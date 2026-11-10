@@ -81,7 +81,11 @@ export default function Attendance() {
     setError(err);
   }
 
-  if (!shift) return null;
+  if (!shift) {
+    return shiftIds.length > 0 && shifts.length === 0 ? (
+      <ErrorBox message="You have no shifts on the roster, so there is no attendance for you to mark. Ask an admin to check your shifts on the Users page." />
+    ) : null;
+  }
 
   return (
     <div className="space-y-4">

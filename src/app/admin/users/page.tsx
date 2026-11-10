@@ -13,6 +13,8 @@ interface AppUser {
   shift_ids: number[];
   display_name: string | null;
   phone: string | null;
+  staff_id: string | null;
+  follow_roster: boolean;
   created_at: string;
 }
 
@@ -59,8 +61,25 @@ export default function Users() {
   }
 
   /** Tick the shifts this leader is rostered on (matched by email to the staff list). */
+  /** live roster shifts of the staff member a login is linked to */
+  const rosterShiftsOf = (staffId: string | null) =>
+    staffId ? [...new Set(assignments.filter((a) => a.staff_id === staffId).map((a) => a.shift_id))].sort((a, b) => a - b) : [];
+  /** the shifts a leader actually gets (same rule as the database) */
+  const effectiveShifts = (u: AppUser) => (u.follow_roster && u.staff_id ? rosterShiftsOf(u.staff_id) : u.shift_ids);
+
+  async function saveLink(u: AppUser, patch: { staff_id?: string | null; follow_roster?: boolean }) {
+    const next = { ...patch };
+    if (patch.staff_id === null) next.follow_roster = false;
+    setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, ...next } : x)));
+    const { error } = await supabase().from("app_users").update(next).eq("email", u.email);
+    if (error) {
+      setError(error.message);
+      load();
+    }
+  }
+
   function applyRosterShifts(u: AppUser) {
-    const person = staff.find((p) => p.email?.toLowerCase() === u.email.toLowerCase());
+    const person = staff.find((p) => p.id === u.staff_id) ?? staff.find((p) => p.email?.toLowerCase() === u.email.toLowerCase());
     if (!person) return setError(`${u.email} isn't on the staff list, so their roster shifts can't be looked up — tick shifts manually.`);
     const ids = [...new Set(assignments.filter((a) => a.staff_id === person.id).map((a) => a.shift_id))].sort((a, b) => a - b);
     if (!ids.length) return setError(`${person.full_name} has no shifts on the roster.`);
@@ -132,7 +151,7 @@ export default function Users() {
                   {u.role}
                   {u.role === "leader" && (
                     <span className="ml-1 font-semibold normal-case text-carnival-ink/60">
-                      · {u.areas.length ? u.areas.join(", ") : "all areas"} · {u.shift_ids.length ? `${u.shift_ids.length} shift${u.shift_ids.length === 1 ? "" : "s"}` : "all shifts"}
+                      · {u.areas.length ? u.areas.join(", ") : "all areas"} · {u.follow_roster && u.staff_id ? `roster shifts (${effectiveShifts(u).length})` : u.shift_ids.length ? `${u.shift_ids.length} shift${u.shift_ids.length === 1 ? "" : "s"}` : "all shifts"}
                     </span>
                   )}
                 </div>
@@ -142,10 +161,29 @@ export default function Users() {
               )}
             </div>
             {u.role === "leader" && (
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <label className="min-w-0 flex-1 text-xs font-semibold">
+                  Staff record (links this login to the roster)
+                  <select value={u.staff_id ?? ""} onChange={(e) => saveLink(u, { staff_id: e.target.value || null, ...(e.target.value ? { follow_roster: true } : {}) })}
+                    className={`mt-1 w-full rounded-lg border-0 bg-white px-2.5 py-1.5 text-sm ring-1 ${u.staff_id ? "ring-carnival-teal/30" : "ring-amber-400"}`}>
+                    <option value="">— Not linked —</option>
+                    {[...staff].sort((a, b) => a.full_name.localeCompare(b.full_name)).map((p) => (
+                      <option key={p.id} value={p.id}>{p.full_name}{p.uid ? ` (${p.uid})` : ""}{p.is_leader ? " · leader" : ""}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className={`flex items-center gap-2 pb-1.5 text-xs font-semibold ${u.staff_id ? "" : "opacity-40"}`}>
+                  <input type="checkbox" disabled={!u.staff_id} checked={u.follow_roster && !!u.staff_id}
+                    onChange={(e) => saveLink(u, { follow_roster: e.target.checked })} className="size-4 accent-carnival-red" />
+                  Follow their roster shifts automatically
+                </label>
+              </div>
+            )}
+            {u.role === "leader" && (
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <label className="text-xs font-semibold">
                   Name shown to staff (“Report to”)
-                  <input defaultValue={u.display_name ?? ""} placeholder="e.g. Aishath Jeeza"
+                  <input defaultValue={u.display_name ?? ""} placeholder={staff.find((p) => p.id === u.staff_id)?.full_name ?? "e.g. Aishath Jeeza"}
                     onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (u.display_name ?? null)) saveContact(u, { display_name: v }); }}
                     className="mt-1 w-full rounded-lg border-0 bg-white px-2.5 py-1.5 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
                 </label>
@@ -173,22 +211,30 @@ export default function Users() {
             {u.role === "leader" && (
               <div className="mt-2 rounded-xl bg-carnival-sky/50 p-2" role="group" aria-label={`Shifts for ${u.email}`}>
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-carnival-ink/70">Shifts {u.shift_ids.length ? "" : "(none ticked = all shifts)"}</span>
-                  <span className="flex gap-2">
-                    <button onClick={() => applyRosterShifts(u)} className="text-xs font-bold text-carnival-teal-dark hover:underline">Use their roster shifts</button>
-                    {u.shift_ids.length > 0 && <button onClick={() => saveShifts(u, [])} className="text-xs font-bold text-carnival-ink/60 hover:underline">Clear</button>}
+                  <span className="text-xs font-bold text-carnival-ink/70">
+                    Shifts{" "}
+                    {u.follow_roster && u.staff_id
+                      ? "(following their roster — updates when their duties change)"
+                      : u.shift_ids.length ? "" : "(none ticked = all shifts)"}
                   </span>
+                  {!(u.follow_roster && u.staff_id) && (
+                    <span className="flex gap-2">
+                      <button onClick={() => applyRosterShifts(u)} className="text-xs font-bold text-carnival-teal-dark hover:underline">Use their roster shifts</button>
+                      {u.shift_ids.length > 0 && <button onClick={() => saveShifts(u, [])} className="text-xs font-bold text-carnival-ink/60 hover:underline">Clear</button>}
+                    </span>
+                  )}
                 </div>
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {[...new Set(shifts.map((x) => x.shift_date))].map((d) => (
                     <div key={d} className="flex flex-wrap items-center gap-1">
                       <span className="w-14 text-[11px] font-bold">{fmtDate(d, { day: "numeric", month: "short" })}</span>
                       {shifts.filter((x) => x.shift_date === d).map((x) => {
-                        const on = u.shift_ids.includes(x.id);
+                        const following = u.follow_roster && !!u.staff_id;
+                        const on = effectiveShifts(u).includes(x.id);
                         return (
-                          <button key={x.id} onClick={() => toggleShift(u, x.id)} aria-pressed={on}
+                          <button key={x.id} onClick={() => toggleShift(u, x.id)} aria-pressed={on} disabled={following}
                             title={`Shift ${x.shift_no} · ${fmtTime(x.starts_at)}–${fmtTime(x.ends_at)}`}
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${on ? "bg-carnival-red text-white ring-carnival-red" : "bg-white ring-carnival-teal/30 hover:bg-carnival-cream"}`}>
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${on ? "bg-carnival-red text-white ring-carnival-red" : "bg-white ring-carnival-teal/30 hover:bg-carnival-cream"} disabled:cursor-default`}>
                             S{x.shift_no}
                           </button>
                         );

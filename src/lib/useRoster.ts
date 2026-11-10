@@ -113,7 +113,9 @@ export function useRole() {
       if (!e) return setRole(null);
       const { data: row } = await db.from("app_users").select("role, areas, shift_ids").eq("email", e).maybeSingle();
       setAreas((row?.areas as string[] | undefined) ?? []);
-      setShiftIds((row?.shift_ids as number[] | undefined) ?? []);
+      // effective shifts: live roster duties when the login follows the roster, else the ticked shifts
+      const { data: eff } = await db.rpc("my_shift_ids");
+      setShiftIds((eff as number[] | null) ?? (row?.shift_ids as number[] | undefined) ?? []);
       setRole((row?.role as "admin" | "leader" | undefined) ?? null);
     });
   }, []);
