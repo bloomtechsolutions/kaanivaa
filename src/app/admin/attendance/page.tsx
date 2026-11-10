@@ -21,7 +21,7 @@ function defaultShiftNo() {
 }
 
 export default function Attendance() {
-  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, scope, role } = useAdmin();
+  const { shifts: allShifts, assignments, staff, staffById, setStatus, reload, scope, role, unlocked, email } = useAdmin();
   // leaders only see the shifts they cover, and on each shift only the areas they cover there
   const shifts = useMemo(() => (scope ? allShifts.filter((s) => scope.has(s.id)) : allShifts), [allShifts, scope]);
   const dates = useMemo(() => [...new Set(shifts.map((s) => s.shift_date))], [shifts]);
@@ -35,7 +35,6 @@ export default function Attendance() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   // clock for the "only on the day" lock, ticking every 30s
   const [now, setNow] = useState<number | null>(null);
-  const [unlocked, setUnlocked] = useState<number | null>(null); // admin correction unlock, per shift
   useEffect(() => {
     const tick = () => setNow(Date.now());
     tick();
@@ -59,7 +58,16 @@ export default function Attendance() {
 
   const shift = shifts.find((s) => s.id === shiftId);
   const dayOpen = !!shift && now !== null && attendanceOpen(shift.shift_date, now);
-  const canEdit = dayOpen || (role === "admin" && unlocked === shiftId);
+  const isUnlocked = shiftId !== null && unlocked.has(shiftId);
+  const canEdit = dayOpen || isUnlocked;
+  async function setUnlock(ids: number[], on: boolean) {
+    const db = supabase().from("attendance_unlocks");
+    const { error } = on
+      ? await db.upsert(ids.map((id) => ({ shift_id: id, unlocked_by: email })))
+      : await db.delete().in("shift_id", ids);
+    if (error) setError(error.message);
+    else reload();
+  }
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return assignments
@@ -147,16 +155,30 @@ export default function Attendance() {
         </div>
       </Panel>
 
-      {!dayOpen && (
+      {!dayOpen && isUnlocked && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-300">
+          <span>🔓 Unlocked by an admin outside its day (testing / corrections). Everyone can mark this shift until it is locked again.</span>
+          {role === "admin" && (
+            <span className="flex gap-2">
+              <button onClick={() => setUnlock([shiftId!], false)} className="rounded-lg bg-white px-3 py-1 text-xs font-bold ring-1 ring-amber-300">Lock this shift</button>
+              {unlocked.size > 1 && (
+                <button onClick={() => setUnlock([...unlocked], false)} className="rounded-lg bg-white px-3 py-1 text-xs font-bold ring-1 ring-amber-300">Lock all ({unlocked.size})</button>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {!dayOpen && !isUnlocked && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 p-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
           <span>
             🔒 Attendance for {fmtDate(shift.shift_date, { weekday: "long", day: "numeric", month: "long" })} can only be marked on that day.
             {now !== null && now < Date.parse(`${shift.shift_date}T00:00:00+05:00`) ? " It opens at midnight." : " This day is closed."}
           </span>
           {role === "admin" && (
-            unlocked === shiftId
-              ? <button onClick={() => setUnlocked(null)} className="rounded-lg bg-white px-3 py-1 text-xs font-bold ring-1 ring-slate-300">Lock again</button>
-              : <button onClick={() => setUnlocked(shiftId)} className="rounded-lg bg-carnival-red px-3 py-1 text-xs font-bold text-white">Unlock to correct (admin)</button>
+            <span className="flex gap-2">
+              <button onClick={() => setUnlock([shiftId!], true)} className="rounded-lg bg-carnival-red px-3 py-1 text-xs font-bold text-white">Unlock this shift for everyone</button>
+              <button onClick={() => setUnlock(allShifts.map((x) => x.id), true)} className="rounded-lg bg-white px-3 py-1 text-xs font-bold ring-1 ring-slate-300">Unlock all shifts</button>
+            </span>
           )}
         </div>
       )}

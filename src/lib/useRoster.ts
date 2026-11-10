@@ -12,6 +12,8 @@ export interface RosterData {
   staffById: Map<string, Staff>;
   shiftById: Map<number, Shift>;
   dates: string[];
+  /** shifts an admin has unlocked for attendance outside their day */
+  unlocked: Set<number>;
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
@@ -24,17 +26,21 @@ export function useRoster(): RosterData {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [draws, setDraws] = useState<Draw[]>([]);
+  const [unlockedIds, setUnlockedIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const db = supabase();
-    const [st, sh, as, dr] = await Promise.all([
+    const loadUnlocks = db.from("attendance_unlocks").select("shift_id");
+    const [st, sh, as, dr, ul] = await Promise.all([
       db.from("staff").select("*").order("full_name"),
       db.from("shifts").select("*").order("shift_date").order("shift_no"),
       db.from("assignments").select("*").range(0, 4999),
       db.from("draws").select("*").order("drawn_at"),
+      loadUnlocks,
     ]);
+    if (!ul.error) setUnlockedIds((ul.data as { shift_id: number }[]).map((r) => r.shift_id));
     const err = st.error ?? sh.error ?? as.error ?? dr.error;
     setError(err ? err.message : null);
     if (!err) {
@@ -70,6 +76,9 @@ export function useRoster(): RosterData {
       .on("postgres_changes", { event: "*", schema: "public", table: "staff" }, () => {
         db.from("staff").select("*").order("full_name").then(({ data }) => data && setStaff(data as Staff[]));
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_unlocks" }, () => {
+        db.from("attendance_unlocks").select("shift_id").then(({ data }) => data && setUnlockedIds((data as { shift_id: number }[]).map((r) => r.shift_id)));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "draws" }, () => {
         db.from("draws").select("*").order("drawn_at").then(({ data }) => data && setDraws(data as Draw[]));
       })
@@ -100,8 +109,9 @@ export function useRoster(): RosterData {
   const staffById = useMemo(() => new Map(staff.map((s) => [s.id, s])), [staff]);
   const shiftById = useMemo(() => new Map(shifts.map((s) => [s.id, s])), [shifts]);
   const dates = useMemo(() => [...new Set(shifts.map((s) => s.shift_date))], [shifts]);
+  const unlocked = useMemo(() => new Set(unlockedIds), [unlockedIds]);
 
-  return { staff, shifts, assignments, draws, staffById, shiftById, dates, loading, error, reload, setStatus };
+  return { staff, shifts, assignments, draws, staffById, shiftById, dates, unlocked, loading, error, reload, setStatus };
 }
 
 export function useRole() {
