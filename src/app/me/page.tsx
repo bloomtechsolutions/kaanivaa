@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBox, Heading, Panel, PublicHeader } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
+import VenueMap from "@/components/VenueMap";
 import { ATTENDED, STATUS_META, fmtDate, fmtTime, type Status } from "@/lib/roster";
 
 interface Row {
@@ -124,6 +125,8 @@ export default function MyDuty() {
                   </ul>
                 </Panel>
               ))}
+
+              <VenueMap title="Where is my location?" className="pt-4" />
             </>
           )}
         </div>

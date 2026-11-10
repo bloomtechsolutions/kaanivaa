@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { PublicHeader } from "@/components/ui";
+import VenueMap from "@/components/VenueMap";
 
 const DAYS = [
   { d: "Wed", n: "11" },
@@ -58,6 +59,8 @@ export default function Home() {
             completed duties count for the grand draw; that day&apos;s duties count for the daily draw.
           </p>
         </section>
+
+        <VenueMap className="mt-10" />
       </main>
     </>
   );
