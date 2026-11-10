@@ -11,6 +11,8 @@ interface AppUser {
   role: "admin" | "leader";
   areas: string[];
   shift_ids: number[];
+  display_name: string | null;
+  phone: string | null;
   created_at: string;
 }
 
@@ -66,6 +68,15 @@ export default function Users() {
     saveShifts(u, ids);
   }
 
+  async function saveContact(u: AppUser, patch: { display_name?: string | null; phone?: string | null }) {
+    setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, ...patch } : x)));
+    const { error } = await supabase().from("app_users").update(patch).eq("email", u.email);
+    if (error) {
+      setError(error.message);
+      load();
+    }
+  }
+
   async function toggleArea(u: AppUser, area: string) {
     const areas = u.areas.includes(area) ? u.areas.filter((a) => a !== area) : [...u.areas, area];
     setUsers((list) => list.map((x) => (x.email === u.email ? { ...x, areas } : x)));
@@ -89,7 +100,7 @@ export default function Users() {
       <Panel className="p-4 text-sm">
         <p>
           <b>Leaders</b> mark attendance and can add staff to extra shifts. Give a leader <b>areas</b> and <b>shifts</b> and they
-          will only see and manage staff in those areas and shifts (none ticked = all). <b>Admins</b> see everything, run lucky draws,
+          will only see and manage staff in those areas and shifts (none ticked = all). Give them a <b>name</b> so staff in their area see who to report to. <b>Admins</b> see everything, run lucky draws,
           change duties and manage users.
         </p>
         <p className="mt-2 text-carnival-ink/70">
@@ -130,6 +141,22 @@ export default function Users() {
                 <button onClick={() => remove(u)} className="text-xs font-bold text-rose-700 hover:underline">Remove</button>
               )}
             </div>
+            {u.role === "leader" && (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <label className="text-xs font-semibold">
+                  Name shown to staff (“Report to”)
+                  <input defaultValue={u.display_name ?? ""} placeholder="e.g. Aishath Jeeza"
+                    onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (u.display_name ?? null)) saveContact(u, { display_name: v }); }}
+                    className="mt-1 w-full rounded-lg border-0 bg-white px-2.5 py-1.5 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
+                </label>
+                <label className="text-xs font-semibold">
+                  Phone (optional, shown to their staff)
+                  <input defaultValue={u.phone ?? ""} placeholder="e.g. 7771234" inputMode="tel"
+                    onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (u.phone ?? null)) saveContact(u, { phone: v }); }}
+                    className="mt-1 w-full rounded-lg border-0 bg-white px-2.5 py-1.5 text-sm ring-1 ring-carnival-teal/30 focus:ring-2 focus:ring-carnival-teal focus:outline-none" />
+                </label>
+              </div>
+            )}
             {u.role === "leader" && (
               <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={`Areas for ${u.email}`}>
                 {LOCATIONS.map((l) => {

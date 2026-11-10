@@ -15,6 +15,8 @@ interface Row {
   location: string | null;
   responsibility: string | null;
   status: Status | null;
+  report_to: string | null;
+  report_to_kind: "area" | "shift" | null;
 }
 
 export default function MyDuty() {
@@ -104,6 +106,13 @@ export default function MyDuty() {
                           <div className="text-sm text-carnival-ink/70">
                             {r.location} · {r.responsibility}
                           </div>
+                          {r.report_to && (
+                            <div className="mt-1 text-sm">
+                              <span className="font-bold text-carnival-red">Report to:</span>{" "}
+                              <span className="font-semibold">{r.report_to}</span>
+                              <span className="text-carnival-ink/60">{r.report_to_kind === "area" ? ` · ${r.location} leader` : " · shift leaders"}</span>
+                            </div>
+                          )}
                         </div>
                         {r.status !== "pending" && (
                           <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${STATUS_META[r.status!].chip}`}>
