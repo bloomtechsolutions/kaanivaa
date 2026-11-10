@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAdmin } from "@/components/AdminShell";
 import { ErrorBox, Heading, Panel } from "@/components/ui";
 import { supabase } from "@/lib/supabase/client";
-import { LOCATIONS, fmtDate, fmtTime } from "@/lib/roster";
+import { LOCATIONS, fmtDate, fmtTime, type Assignment, type Shift } from "@/lib/roster";
 
 interface AppUser {
   email: string;
@@ -247,6 +247,70 @@ export default function Users() {
           </div>
         ))}
       </Panel>
+
+      <LeaderCoverage
+        shifts={shifts}
+        assignments={assignments}
+        leaders={users
+          .filter((u) => u.role === "leader")
+          .map((u) => ({
+            name: u.display_name?.trim() || staff.find((p) => p.id === u.staff_id)?.full_name || null,
+            areas: u.areas,
+            shiftIds: effectiveShifts(u),
+          }))}
+      />
     </div>
+  );
+}
+
+/** Which leader staff will "Report to" for every shift × area; gaps in red. */
+function LeaderCoverage({
+  shifts, assignments, leaders,
+}: {
+  shifts: Shift[];
+  assignments: Assignment[];
+  leaders: { name: string | null; areas: string[]; shiftIds: number[] }[];
+}) {
+  const areas = LOCATIONS.filter((l) => l.name !== "Shift Leadership");
+  let gaps = 0;
+  const rows = shifts.map((sh) => ({
+    sh,
+    cells: areas.map((l) => {
+      const staffCount = assignments.filter((a) => a.shift_id === sh.id && a.location === l.name).length;
+      const names = leaders
+        .filter((x) => x.areas.includes(l.name) && (x.shiftIds.length === 0 || x.shiftIds.includes(sh.id)))
+        .map((x) => x.name ?? "(no name)");
+      if (staffCount > 0 && (names.length === 0 || names.every((n) => n === "(no name)"))) gaps++;
+      return { staffCount, names };
+    }),
+  }));
+  return (
+    <Panel className="overflow-x-auto p-4">
+      <h2 className="font-extrabold">Leader coverage</h2>
+      <p className="text-xs text-carnival-ink/70">
+        Who staff see as “Report to” for each shift and area.{" "}
+        {gaps ? <b className="text-rose-700">{gaps} gap{gaps === 1 ? "" : "s"} — give a leader that area and shift.</b> : <b className="text-emerald-700">Every area is covered.</b>}
+      </p>
+      <table className="mt-2 w-full min-w-[640px] text-xs">
+        <thead>
+          <tr className="text-left text-carnival-ink/60">
+            <th className="py-1 pr-2">Shift</th>
+            {areas.map((l) => <th key={l.name} className="px-1 py-1">{l.name}</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-carnival-teal/10">
+          {rows.map(({ sh, cells }) => (
+            <tr key={sh.id}>
+              <td className="whitespace-nowrap py-1 pr-2 font-bold">{fmtDate(sh.shift_date, { day: "numeric", month: "short" })} S{sh.shift_no}</td>
+              {cells.map((c, i) => (
+                <td key={i} className={`px-1 py-1 ${c.staffCount && (!c.names.length || c.names.every((n) => n === "(no name)")) ? "bg-rose-50 font-bold text-rose-700" : ""}`}>
+                  {c.staffCount === 0 ? <span className="text-carnival-ink/30">no staff</span> : c.names.length ? c.names.join(", ") : "— no leader"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Panel>
   );
 }
