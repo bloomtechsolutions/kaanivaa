@@ -100,7 +100,7 @@ export default function Users() {
       <Panel className="p-4 text-sm">
         <p>
           <b>Leaders</b> mark attendance and can add staff to extra shifts. Give a leader <b>areas</b> and <b>shifts</b> and they
-          will only see and manage staff in those areas and shifts (none ticked = all). Give them a <b>name</b> so staff in their area see who to report to. <b>Admins</b> see everything, run lucky draws,
+          will only see and manage staff in those areas and shifts (none ticked = all). Give each area leader a <b>name</b> — staff in that area see it as “Report to” on My duty. <b>Admins</b> see everything, run lucky draws,
           change duties and manage users.
         </p>
         <p className="mt-2 text-carnival-ink/70">

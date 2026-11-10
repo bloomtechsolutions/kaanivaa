@@ -16,7 +16,7 @@ interface Row {
   responsibility: string | null;
   status: Status | null;
   report_to: string | null;
-  report_to_kind: "area" | "shift" | null;
+  report_to_kind: "area" | null;
 }
 
 export default function MyDuty() {
@@ -110,7 +110,7 @@ export default function MyDuty() {
                             <div className="mt-1 text-sm">
                               <span className="font-bold text-carnival-red">Report to:</span>{" "}
                               <span className="font-semibold">{r.report_to}</span>
-                              <span className="text-carnival-ink/60">{r.report_to_kind === "area" ? ` · ${r.location} leader` : " · shift leaders"}</span>
+                              <span className="text-carnival-ink/60"> · {r.location} area leader</span>
                             </div>
                           )}
                         </div>
